@@ -1,13 +1,15 @@
 import asyncio
 import os
 
+import requests
 from azure.ai.projects import AIProjectClient
 from azure.ai.projects.models import MCPTool, PromptAgentDefinition
-from azure.identity import DefaultAzureCredential
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
 project_endpoint = os.environ.get("AZURE_AI_PROJECT_ENDPOINT")
+project_resource_id = os.environ.get("AZURE_AI_PROJECT_RESOURCE_ID")
 model_name = os.environ.get("MODEL_DEPLOYMENT_NAME")
 
 # Configuration
@@ -18,8 +20,54 @@ machine_data_mcp_endpoint = os.environ.get("MACHINE_MCP_SERVER_ENDPOINT")
 apim_subscription_key = os.environ.get("APIM_SUBSCRIPTION_KEY")
 
 
+def create_project_connection(connection_name: str, target: str, *, auth_type: str, audience: str | None = None, credentials: dict | None = None):
+    credential = DefaultAzureCredential()
+    bearer_token_provider = get_bearer_token_provider(
+        credential, "https://management.azure.com/.default")
+    headers = {
+        "Authorization": f"Bearer {bearer_token_provider()}",
+    }
+
+    properties = {
+        "authType": auth_type,
+        "category": "RemoteTool",
+        "target": target,
+        "isSharedToAll": True,
+        "metadata": {"ApiType": "Azure"},
+    }
+    if audience:
+        properties["audience"] = audience
+    if credentials:
+        properties["credentials"] = credentials
+
+    response = requests.put(
+        f"https://management.azure.com{project_resource_id}/connections/{connection_name}?api-version=2025-10-01-preview",
+        headers=headers,
+        json={
+            "name": connection_name,
+            "type": "Microsoft.MachineLearningServices/workspaces/connections",
+            "properties": properties,
+        },
+        timeout=60,
+    )
+    response.raise_for_status()
+    print(f"✅ Connection '{connection_name}' created or updated successfully.")
+
+
 async def main():
     try:
+        create_project_connection(
+            connection_name="machine-data-connection",
+            target=machine_data_mcp_endpoint,
+            auth_type="CustomKeys",
+            credentials={"keys": {"Ocp-Apim-Subscription-Key": apim_subscription_key}},
+        )
+        create_project_connection(
+            connection_name="machine-wiki-connection",
+            target=machine_wiki_mcp_endpoint,
+            auth_type="ProjectManagedIdentity",
+            audience="https://search.azure.com/",
+        )
 
         project_client = AIProjectClient(
             endpoint=project_endpoint, credential=DefaultAzureCredential())
@@ -27,7 +75,7 @@ async def main():
             agent_name="FaultDiagnosisAgent",
             description="Fault diagnosis agent",
             definition=PromptAgentDefinition(
-                model="gpt-4.1",
+                model=model_name,
                 instructions="""You are a Fault Diagnosis Agent evaluating the root cause of maintenance alerts.
 
 You will receive detected sensor deviations for a given machine. Your task is to determine the most likely root cause using ONLY the provided tools.
@@ -71,7 +119,12 @@ Grounding rules (IMPORTANT):
                         project_connection_id="machine-data-connection"
                     ),
 
-                    # TODO: add Foundry IQ MCP tool
+                    MCPTool(
+                        server_label="machine-wiki",
+                        server_url=machine_wiki_mcp_endpoint,
+                        require_approval="never",
+                        project_connection_id="machine-wiki-connection"
+                    ),
 
                 ]
 

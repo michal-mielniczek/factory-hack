@@ -73,10 +73,14 @@ def setup_cosmos_db():
         'Telemetry': {'partition_key': '/machineId', 'ttl': 2592000},  # 30 days TTL
         'KnowledgeBase': {'partition_key': '/machineType'},
         'PartsInventory': {'partition_key': '/category'},
+        'Suppliers': {'partition_key': '/reliability'},
         'Technicians': {'partition_key': '/department'},
         'WorkOrders': {'partition_key': '/status'},
         'MaintenanceHistory': {'partition_key': '/machineId'},
-        'MaintenanceWindows': {'partition_key': '/isAvailable'}
+        'MaintenanceWindows': {'partition_key': '/isAvailable'},
+        'MaintenanceSchedules': {'partition_key': '/id'},
+        'PartsOrders': {'partition_key': '/id'},
+        'ChatHistories': {'partition_key': '/entityId'}
     }
     
     container_clients = {}
@@ -105,6 +109,7 @@ def seed_cosmos_data(container_clients):
         'Telemetry': 'data/telemetry-samples.json',
         'KnowledgeBase': 'data/knowledge-base.json',
         'PartsInventory': 'data/parts-inventory.json',
+        'Suppliers': 'data/suppliers.json',
         'Technicians': 'data/technicians.json',
         'WorkOrders': 'data/work-orders.json',
         'MaintenanceHistory': 'data/maintenance-history.json',
@@ -234,6 +239,7 @@ python3 seed_blob_wiki.py
 
 # Clean up uploader script
 rm seed_blob_wiki.py
+echo "COSMOS_DATABASE_NAME=\"FactoryOpsDB\"" >> ../.env
 echo "COSMOS_DATABASE=\"FactoryOpsDB\"" >> ../.env
 
 echo "✅ Blob upload complete!"

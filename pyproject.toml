@@ -1,0 +1,82 @@
+[project]
+name = "factory-hack-workspace"
+version = "0.1.0"
+description = "Repo-root development tooling and shared Python dependencies for Factory Hack."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "agent-framework-azure-ai==1.0.0b260107",
+    "agent-framework-azure-ai-search==1.0.0b260107",
+    "agent-framework-core==1.0.0b260107",
+    "azure-ai-projects==2.0.0b3",
+    "azure-cosmos>=4.5.0",
+    "azure-identity>=1.15.0",
+    "azure-search-documents>=11.7.0b2",
+    "azure-ai-inference[tracing]>=1.0.0b6",
+    "azure-monitor-opentelemetry>=1.2.0",
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
+    "opentelemetry-semantic-conventions-ai==0.4.13",
+    "dataclasses-json>=0.6.0",
+    "python-dotenv>=1.0.0",
+    "ipykernel>=6.29.5",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.2.0",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=1.3.0",
+    "ruff>=0.11.0",
+]
+
+[tool.uv]
+package = false
+prerelease = "allow"
+
+[tool.pytest.ini_options]
+testpaths = [
+    "challenge-1",
+    "challenge-3",
+    "challenge-4/agent-workflow/app",
+]
+python_files = [
+    "test_*.py",
+    "*_test.py",
+]
+asyncio_mode = "auto"
+addopts = [
+    "-ra",
+    "--strict-config",
+    "--strict-markers",
+]
+norecursedirs = [
+    ".git",
+    ".venv",
+    "node_modules",
+    "challenge-2",
+    "challenge-4/agent-workflow/frontend",
+    "challenge-4/agent-workflow/app/.venv",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = [
+    "challenge-2/example-solution",
+    "challenge-4/agent-workflow/app/.venv",
+    "challenge-4/agent-workflow/frontend",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint]
+select = [
+    "E4",
+    "E7",
+    "E9",
+    "F",
+]

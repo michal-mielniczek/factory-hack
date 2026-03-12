@@ -1,0 +1,44 @@
+[
+  {
+    "id": "supplier-001",
+    "name": "Nordic Industrial Parts",
+    "parts": [
+      "TCP-HTR-4KW",
+      "GEN-TS-K400",
+      "TBM-BRG-6220",
+      "EXT-HTR-BAND",
+      "BMX-BRG-22320"
+    ],
+    "leadTimeDays": 5,
+    "reliability": "High",
+    "contactEmail": "orders@nordicindustrialparts.example"
+  },
+  {
+    "id": "supplier-002",
+    "name": "Precision Motion Supply",
+    "parts": [
+      "TBM-SRV-5KW",
+      "TBM-LS-500N",
+      "TUM-LC-2KN",
+      "TUM-ENC-5000"
+    ],
+    "leadTimeDays": 7,
+    "reliability": "High",
+    "contactEmail": "sales@precisionmotion.example"
+  },
+  {
+    "id": "supplier-003",
+    "name": "Rubber Process Components",
+    "parts": [
+      "EXT-SCR-250",
+      "EXT-DIE-TR",
+      "BMX-TIP-500",
+      "BMX-SEAL-DP",
+      "TCP-BLD-800",
+      "TCP-SEAL-200"
+    ],
+    "leadTimeDays": 10,
+    "reliability": "Medium",
+    "contactEmail": "support@rubberprocesscomponents.example"
+  }
+]

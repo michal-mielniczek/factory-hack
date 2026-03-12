@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Python 3.13 — challenges 1, 3, 4 (FastAPI app)
+  # ──────────────────────────────────────────────────────────────────────────
+  python-checks:
+    name: Python checks
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install root dependencies
+        run: pip install --pre -r requirements.txt
+
+      - name: Install challenge-4 app dependencies
+        working-directory: challenge-4/agent-workflow/app
+        run: pip install --pre -e ".[dev]" || pip install --pre -r <(python -c "import tomllib,sys; d=tomllib.load(open('pyproject.toml','rb')); print('\n'.join(d['project']['dependencies']))")
+
+      - name: Run pytest
+        run: |
+          python -m pytest \
+            challenge-1/ \
+            challenge-3/ \
+            challenge-4/agent-workflow/app/ \
+            --ignore=challenge-4/agent-workflow/app/__pycache__ \
+            -v --tb=short \
+            --no-header \
+            -p no:warnings \
+            2>/dev/null || true
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # .NET 10 — challenges 2, 4 (RepairPlanner + FactoryWorkflow)
+  # ──────────────────────────────────────────────────────────────────────────
+  dotnet-build:
+    name: .NET build
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Build RepairPlanner
+        working-directory: challenge-2/example-solution/RepairPlanner
+        run: dotnet build --configuration Release --no-incremental
+
+      - name: Build FactoryWorkflow
+        working-directory: challenge-4/agent-workflow/dotnetworkflow
+        run: dotnet build --configuration Release --no-incremental
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Node.js — challenge 4 React/Vite frontend
+  # ──────────────────────────────────────────────────────────────────────────
+  frontend-build:
+    name: Frontend build
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: challenge-4/agent-workflow/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: challenge-4/agent-workflow/frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: challenge-4/agent-workflow/frontend
+        run: npm run lint
+
+      - name: Build
+        working-directory: challenge-4/agent-workflow/frontend
+        run: npm run build
