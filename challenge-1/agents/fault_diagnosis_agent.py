@@ -14,16 +14,21 @@ model_name = os.environ.get("MODEL_DEPLOYMENT_NAME")
 
 # Configuration
 knowledge_base_name = "machine-kb"
-search_endpoint = os.environ.get("SEARCH_SERVICE_ENDPOINT")
+search_endpoint = (os.environ.get("SEARCH_SERVICE_ENDPOINT") or "").rstrip("/")
 machine_wiki_mcp_endpoint = (
-    f"{search_endpoint}knowledgebases/{knowledge_base_name}/mcp?api-version=2025-11-01-preview"
+    f"{search_endpoint}/knowledgebases/{knowledge_base_name}/mcp?api-version=2025-11-01-preview"
 )
 machine_data_mcp_endpoint = os.environ.get("MACHINE_MCP_SERVER_ENDPOINT")
 apim_subscription_key = os.environ.get("APIM_SUBSCRIPTION_KEY")
 
 
 def create_project_connection(
-    connection_name: str, target: str, auth_type: str, credentials=None, metadata=None
+    connection_name: str,
+    target: str,
+    auth_type: str,
+    credentials=None,
+    metadata=None,
+    audience=None,
 ):
     bearer_token_provider = get_bearer_token_provider(
         DefaultAzureCredential(), "https://management.azure.com/.default"
@@ -41,6 +46,7 @@ def create_project_connection(
                 "category": "RemoteTool",
                 "target": target,
                 "isSharedToAll": True,
+                **({"audience": audience} if audience else {}),
                 **({"credentials": credentials} if credentials else {}),
                 **({"metadata": metadata} if metadata else {}),
             },
@@ -63,7 +69,8 @@ async def main():
             connection_name="machine-wiki-connection",
             target=machine_wiki_mcp_endpoint,
             auth_type="ProjectManagedIdentity",
-            metadata={"type": "custom_MCP", "resource": "https://search.azure.com"},
+            metadata={"ApiType": "Azure"},
+            audience="https://search.azure.com/",
         )
 
         project_client = AIProjectClient(
