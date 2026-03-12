@@ -7,7 +7,7 @@ on:
 jobs:
   python-checks:
     name: Python checks
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +41,7 @@ jobs:
 
   dotnet-build:
     name: .NET build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +68,7 @@ jobs:
 
   frontend-build:
     name: Frontend build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - uses: actions/checkout@v4

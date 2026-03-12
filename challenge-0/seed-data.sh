@@ -58,7 +58,7 @@ def setup_cosmos_db():
     cosmos_client = CosmosClient(os.environ['COSMOS_ENDPOINT'], os.environ['COSMOS_KEY'])
     
     # Create database
-    database_name = "FactoryOpsDB"
+    database_name = os.environ.get('COSMOS_DATABASE_NAME') or os.environ.get('COSMOS_DATABASE') or "FactoryOpsDB"
     try:
         database = cosmos_client.create_database_if_not_exists(id=database_name)
         print(f"✅ Database '{database_name}' ready")
@@ -73,10 +73,14 @@ def setup_cosmos_db():
         'Telemetry': {'partition_key': '/machineId', 'ttl': 2592000},  # 30 days TTL
         'KnowledgeBase': {'partition_key': '/machineType'},
         'PartsInventory': {'partition_key': '/category'},
+        'Suppliers': {'partition_key': '/reliability'},
         'Technicians': {'partition_key': '/department'},
         'WorkOrders': {'partition_key': '/status'},
         'MaintenanceHistory': {'partition_key': '/machineId'},
-        'MaintenanceWindows': {'partition_key': '/isAvailable'}
+        'MaintenanceWindows': {'partition_key': '/isAvailable'},
+        'MaintenanceSchedules': {'partition_key': '/id'},
+        'PartsOrders': {'partition_key': '/id'},
+        'ChatHistories': {'partition_key': '/entityId'},
     }
     
     container_clients = {}
@@ -105,6 +109,7 @@ def seed_cosmos_data(container_clients):
         'Telemetry': 'data/telemetry-samples.json',
         'KnowledgeBase': 'data/knowledge-base.json',
         'PartsInventory': 'data/parts-inventory.json',
+        'Suppliers': 'data/suppliers.json',
         'Technicians': 'data/technicians.json',
         'WorkOrders': 'data/work-orders.json',
         'MaintenanceHistory': 'data/maintenance-history.json',
@@ -234,7 +239,12 @@ python3 seed_blob_wiki.py
 
 # Clean up uploader script
 rm seed_blob_wiki.py
-echo "COSMOS_DATABASE=\"FactoryOpsDB\"" >> ../.env
+if ! grep -q '^COSMOS_DATABASE_NAME=' ../.env; then
+    echo "COSMOS_DATABASE_NAME=\"${COSMOS_DATABASE_NAME:-FactoryOpsDB}\"" >> ../.env
+fi
+if ! grep -q '^COSMOS_DATABASE=' ../.env; then
+    echo "COSMOS_DATABASE=\"${COSMOS_DATABASE_NAME:-FactoryOpsDB}\"" >> ../.env
+fi
 
 echo "✅ Blob upload complete!"
 
