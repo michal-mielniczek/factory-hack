@@ -29,10 +29,9 @@ def get_thresholds(machine_type: str) -> list:
     """Get all thresholds for a machine type from Cosmos DB"""
     try:
         query = f"SELECT * FROM c WHERE c.machineType = '{machine_type}'"
-        items = list(thresholds_container.query_items(
-            query=query,
-            enable_cross_partition_query=True
-        ))
+        items = list(
+            thresholds_container.query_items(query=query, enable_cross_partition_query=True)
+        )
         return items
     except Exception as e:
         return [{"error": str(e)}]
@@ -42,10 +41,7 @@ def get_machine_data(machine_id: str) -> dict:
     """Get machine data from Cosmos DB"""
     try:
         query = f"SELECT * FROM c WHERE c.id = '{machine_id}'"
-        items = list(machines_container.query_items(
-            query=query,
-            enable_cross_partition_query=True
-        ))
+        items = list(machines_container.query_items(query=query, enable_cross_partition_query=True))
         return items[0] if items else {"error": f"Machine {machine_id} not found"}
     except Exception as e:
         return {"error": str(e)}
@@ -82,23 +78,20 @@ async def main():
                             - summary: human readable summary of the anomalies 
 
                             """,
-                    tools=[
-                        get_machine_data,
-                        get_thresholds]
-
+                    tools=[get_machine_data, get_thresholds],
                 ) as agent,
             ):
-
                 print(f"✅ Created Anomaly Classification Agent: {agent.id}")
 
                 # Test the agent with a simple query
                 print("\n🧪 Testing the agent with a sample query...")
                 try:
-                    result = await agent.run('Hello, can you classify the following anomalies for machine-001: [{"metric": "curing_temperature", "value": 179.2},{"metric": "cycle_time", "value": 14.5}]')
+                    result = await agent.run(
+                        'Hello, can you classify the following anomalies for machine-001: [{"metric": "curing_temperature", "value": 179.2},{"metric": "cycle_time", "value": 14.5}]'
+                    )
                     print(f"✅ Agent response: {result.text}")
                 except Exception as test_error:
-                    print(
-                        f"⚠️  Agent test failed (but agent was still created): {test_error}")
+                    print(f"⚠️  Agent test failed (but agent was still created): {test_error}")
 
                 return agent
 
@@ -106,6 +99,7 @@ async def main():
         print(f"❌ Error creating agent: {e}")
         print("Make sure you have run 'az login' and have proper Azure credentials configured.")
         return None
+
 
 if __name__ == "__main__":
     asyncio.run(main())

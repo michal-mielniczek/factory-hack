@@ -43,7 +43,9 @@ load_dotenv(override=True)
 class PartsOrderingAgent:
     """AI Agent for parts ordering"""
 
-    def __init__(self, project_endpoint: str, deployment_name: str, cosmos_service: CosmosDbService):
+    def __init__(
+        self, project_endpoint: str, deployment_name: str, cosmos_service: CosmosDbService
+    ):
         self.project_endpoint = project_endpoint
         self.deployment_name = deployment_name
         self.cosmos_service = cosmos_service
@@ -58,8 +60,7 @@ class PartsOrderingAgent:
 
         context = self._build_context(work_order, inventory, suppliers)
         chat_history_json = await self.cosmos_service.get_work_order_chat_history(work_order.id)
-        print(
-            f"   Using persistent chat history for work order: {work_order.id}")
+        print(f"   Using persistent chat history for work order: {work_order.id}")
 
         instructions = """You are a parts ordering specialist for industrial tire manufacturing equipment.
 
@@ -116,12 +117,15 @@ Always respond in valid JSON format as requested."""
             supplier_name=data["supplierName"],
             total_cost=data["totalCost"],
             expected_delivery_date=datetime.fromisoformat(
-                data["expectedDeliveryDate"].replace("Z", "+00:00")),
+                data["expectedDeliveryDate"].replace("Z", "+00:00")
+            ),
             order_status="Pending",
             created_at=datetime.utcnow(),
         )
 
-    async def _save_interaction_history(self, work_order_id: str, user_context: str, assistant_response: str):
+    async def _save_interaction_history(
+        self, work_order_id: str, user_context: str, assistant_response: str
+    ):
         """Save interaction history to Cosmos DB"""
 
         try:
@@ -129,7 +133,9 @@ Always respond in valid JSON format as requested."""
                 {"role": "user", "content": user_context},
                 {"role": "assistant", "content": assistant_response},
             ]
-            await self.cosmos_service.save_work_order_chat_history(work_order_id, json.dumps(messages))
+            await self.cosmos_service.save_work_order_chat_history(
+                work_order_id, json.dumps(messages)
+            )
         except Exception as e:
             print(f"   Warning: Could not save chat history: {e}")
 
@@ -156,21 +162,18 @@ Always respond in valid JSON format as requested."""
         for part in work_order.required_parts:
             lines.append(f"- **{part.part_name}** (Part#: {part.part_number})")
             lines.append(f"  * Quantity needed: {part.quantity}")
-            lines.append(
-                f"  * Available in stock: {'YES' if part.is_available else 'NO'}")
+            lines.append(f"  * Available in stock: {'YES' if part.is_available else 'NO'}")
 
         lines.extend(["", "## Current Inventory Status"])
 
         if inventory:
             for item in inventory:
                 needs_order = item.current_stock <= item.reorder_point
-                lines.append(
-                    f"- **{item.part_name}** (Part#: {item.part_number})")
+                lines.append(f"- **{item.part_name}** (Part#: {item.part_number})")
                 lines.append(f"  * Current Stock: {item.current_stock}")
                 lines.append(f"  * Minimum Stock: {item.min_stock}")
                 lines.append(f"  * Reorder Point: {item.reorder_point}")
-                lines.append(
-                    f"  * Status: {'⚠️  NEEDS ORDERING' if needs_order else '✓ Adequate'}")
+                lines.append(f"  * Status: {'⚠️  NEEDS ORDERING' if needs_order else '✓ Adequate'}")
                 lines.append(f"  * Location: {item.location}")
         else:
             lines.append("⚠️  No inventory records found for required parts.")
@@ -234,7 +237,7 @@ Always respond in valid JSON format as requested."""
         start = response.find("{")
         if start >= 0:
             end = response.rfind("}")
-            return response[start: end + 1]
+            return response[start : end + 1]
 
         raise Exception("Could not extract JSON from agent response")
 
@@ -252,21 +255,22 @@ async def main():
     cosmos_endpoint = os.getenv("COSMOS_ENDPOINT")
     cosmos_key = os.getenv("COSMOS_KEY")
     database_name = os.getenv("COSMOS_DATABASE_NAME")
-    foundry_project_endpoint = os.getenv(
-        "AZURE_AI_PROJECT_ENDPOINT") or os.getenv("AI_FOUNDRY_PROJECT_ENDPOINT")
+    foundry_project_endpoint = os.getenv("AZURE_AI_PROJECT_ENDPOINT") or os.getenv(
+        "AI_FOUNDRY_PROJECT_ENDPOINT"
+    )
     deployment_name = os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4o")
-    app_insights_connection = os.getenv(
-        "APPLICATIONINSIGHTS_CONNECTION_STRING")
+    app_insights_connection = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
 
     if not all([cosmos_endpoint, cosmos_key, database_name, foundry_project_endpoint]):
         print("Error: Missing required environment variables.")
-        print("Required: COSMOS_ENDPOINT, COSMOS_KEY, COSMOS_DATABASE_NAME, AZURE_AI_PROJECT_ENDPOINT")
+        print(
+            "Required: COSMOS_ENDPOINT, COSMOS_KEY, COSMOS_DATABASE_NAME, AZURE_AI_PROJECT_ENDPOINT"
+        )
         return
 
     enable_tracing(app_insights_connection)
 
-    cosmos_service = CosmosDbService(
-        cosmos_endpoint, cosmos_key, database_name)
+    cosmos_service = CosmosDbService(cosmos_endpoint, cosmos_key, database_name)
 
     # Register agent in Azure AI Foundry portal
     async with (
@@ -285,8 +289,7 @@ async def main():
             except Exception as e:
                 print(f"   Error checking versions: {e}")
 
-            print(
-                f"   Creating new version (will be version #{version_count + 1})...")
+            print(f"   Creating new version (will be version #{version_count + 1})...")
 
             definition = PromptAgentDefinition(
                 model=deployment_name,
@@ -320,7 +323,8 @@ Always respond in valid JSON format with: supplierId, supplierName, orderItems (
             )
             print("   ✅ New version created!")
             print(
-                f"      Agent ID: {registered_agent.id if hasattr(registered_agent, 'id') else 'N/A'}")
+                f"      Agent ID: {registered_agent.id if hasattr(registered_agent, 'id') else 'N/A'}"
+            )
 
             print("   Verifying creation...")
             verify_count = 0
@@ -335,8 +339,7 @@ Always respond in valid JSON format with: supplierId, supplierName, orderItems (
             print(f"   Error details: {traceback.format_exc()}")
             logger.warning(f"Could not register agent in portal: {e}")
 
-    agent_service = PartsOrderingAgent(
-        foundry_project_endpoint, deployment_name, cosmos_service)
+    agent_service = PartsOrderingAgent(foundry_project_endpoint, deployment_name, cosmos_service)
 
     print("1. Retrieving work order...")
     work_order_id = sys.argv[1] if len(sys.argv) > 1 else "2024-468"
@@ -356,8 +359,7 @@ Always respond in valid JSON format with: supplierId, supplierName, orderItems (
     inventory = await cosmos_service.get_inventory_items(part_numbers)
     print(f"   ✓ Found {len(inventory)} inventory records\n")
 
-    parts_needing_order = [
-        p for p in work_order.required_parts if not p.is_available]
+    parts_needing_order = [p for p in work_order.required_parts if not p.is_available]
 
     if not parts_needing_order:
         print("✓ All required parts are available in stock!")
@@ -393,15 +395,13 @@ Always respond in valid JSON format with: supplierId, supplierName, orderItems (
         print(f"Order ID: {order.id}")
         print(f"Work Order: {order.work_order_id}")
         print(f"Supplier: {order.supplier_name} (ID: {order.supplier_id})")
-        print(
-            f"Expected Delivery: {order.expected_delivery_date.strftime('%Y-%m-%d')}")
+        print(f"Expected Delivery: {order.expected_delivery_date.strftime('%Y-%m-%d')}")
         print(f"Total Cost: ${order.total_cost:.2f}")
         print(f"Status: {order.order_status}")
         print("\nOrder Items:")
         for item in order.order_items:
             print(f"  - {item.part_name} (#{item.part_number})")
-            print(
-                f"    Qty: {item.quantity} @ ${item.unit_cost:.2f} = ${item.total_cost:.2f}")
+            print(f"    Qty: {item.quantity} @ ${item.unit_cost:.2f} = ${item.total_cost:.2f}")
         print()
 
         print("5. Saving parts order...")

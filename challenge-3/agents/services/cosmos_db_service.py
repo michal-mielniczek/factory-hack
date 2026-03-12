@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+import os
 from typing import List, Optional
 
 from azure.cosmos import CosmosClient, PartitionKey, exceptions
@@ -155,6 +156,11 @@ class CosmosDbService:
     def __init__(self, endpoint: str, key: str, database_name: str):
         self.client = CosmosClient(endpoint, key)
         self.database = self.client.get_database_client(database_name)
+        self.allow_mock_fallbacks = os.getenv("CHALLENGE3_ALLOW_MOCK_FALLBACKS", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
 
     def _parse_datetime(self, dt_value):
         """Parse datetime from ISO string."""
@@ -212,7 +218,7 @@ class CosmosDbService:
                 machine_id=item.get("machineId", ""),
                 fault_type=item.get("faultType", ""),
                 priority=item.get("priority", ""),
-                assigned_technician=item.get("assignedTechnician", ""),
+                assigned_technician=item.get("assignedTechnician", item.get("assignedTo", "")),
                 required_parts=[
                     RequiredPart(
                         part_number=p.get("partNumber", ""),
@@ -244,6 +250,7 @@ class CosmosDbService:
             "faultType": work_order.fault_type,
             "priority": work_order.priority,
             "assignedTechnician": work_order.assigned_technician,
+            "assignedTo": work_order.assigned_technician,
             "requiredParts": [
                 {
                     "partNumber": p.part_number,
@@ -268,12 +275,8 @@ class CosmosDbService:
         """Get historical maintenance records for a machine."""
 
         try:
-            container = self.database.get_container_client(
-                "MaintenanceHistory")
-            query = (
-                "SELECT * FROM c WHERE c.machineId = @machineId "
-                "ORDER BY c.occurrenceDate DESC"
-            )
+            container = self.database.get_container_client("MaintenanceHistory")
+            query = "SELECT * FROM c WHERE c.machineId = @machineId ORDER BY c.occurrenceDate DESC"
             items = list(
                 container.query_items(
                     query=query,
@@ -289,10 +292,8 @@ class CosmosDbService:
                         id=item.get("id", ""),
                         machine_id=item.get("machineId", ""),
                         fault_type=item.get("faultType", ""),
-                        occurrence_date=self._parse_datetime(
-                            item.get("occurrenceDate")),
-                        resolution_date=self._parse_datetime(
-                            item.get("resolutionDate")),
+                        occurrence_date=self._parse_datetime(item.get("occurrenceDate")),
+                        resolution_date=self._parse_datetime(item.get("resolutionDate")),
                         downtime=item.get("downtime", 0),
                         cost=item.get("cost", 0.0),
                     )
@@ -303,12 +304,13 @@ class CosmosDbService:
             print(f"Warning: Could not retrieve maintenance history: {str(e)}")
             return []
 
-    async def get_available_maintenance_windows(self, days_ahead: int = 14) -> List[MaintenanceWindow]:
+    async def get_available_maintenance_windows(
+        self, days_ahead: int = 14
+    ) -> List[MaintenanceWindow]:
         """Get available maintenance windows from MES."""
 
         try:
-            container = self.database.get_container_client(
-                "MaintenanceWindows")
+            container = self.database.get_container_client("MaintenanceWindows")
             start_date = datetime.utcnow()
             end_date = start_date + timedelta(days=days_ahead)
 
@@ -343,19 +345,35 @@ class CosmosDbService:
                     )
                 )
 
-            return results if results else self._generate_mock_windows(days_ahead)
+            if results:
+                return results
+            if self.allow_mock_fallbacks:
+                print(
+                    "Warning: No maintenance windows in Cosmos DB; using mock fallback "
+                    "(CHALLENGE3_ALLOW_MOCK_FALLBACKS=true)."
+                )
+                return self._generate_mock_windows(days_ahead)
+            raise RuntimeError(
+                "No maintenance windows found in Cosmos DB container 'MaintenanceWindows'."
+            )
         except Exception as e:
-            print(f"Warning: Could not retrieve maintenance windows: {str(e)}")
-            return self._generate_mock_windows(days_ahead)
+            if self.allow_mock_fallbacks:
+                print(
+                    "Warning: Could not retrieve maintenance windows from Cosmos DB; "
+                    f"using mock fallback ({str(e)})"
+                )
+                return self._generate_mock_windows(days_ahead)
+            raise RuntimeError(
+                "Could not retrieve maintenance windows from Cosmos DB and mock fallback is disabled."
+            ) from e
 
     def _generate_mock_windows(self, days_ahead: int) -> List[MaintenanceWindow]:
         """Generate mock maintenance windows."""
 
         windows: List[MaintenanceWindow] = []
-        start_date = (
-            datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-            + timedelta(days=1)
-        )
+        start_date = datetime.utcnow().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) + timedelta(days=1)
 
         for i in range(days_ahead):
             current_date = start_date + timedelta(days=i)
@@ -381,7 +399,9 @@ class CosmosDbService:
             "id": schedule.id,
             "workOrderId": schedule.work_order_id,
             "machineId": schedule.machine_id,
-            "scheduledDate": schedule.scheduled_date.isoformat() if schedule.scheduled_date else None,
+            "scheduledDate": schedule.scheduled_date.isoformat()
+            if schedule.scheduled_date
+            else None,
             "maintenanceWindow": {
                 "id": schedule.maintenance_window.id,
                 "startTime": schedule.maintenance_window.start_time.isoformat()
@@ -414,8 +434,7 @@ class CosmosDbService:
 
         try:
             container = self.database.get_container_client("ChatHistories")
-            item = container.read_item(
-                item=machine_id, partition_key=machine_id)
+            item = container.read_item(item=machine_id, partition_key=machine_id)
             return item.get("historyJson")
         except exceptions.CosmosResourceNotFoundError:
             return None
@@ -450,14 +469,11 @@ class CosmosDbService:
             results: List[InventoryItem] = []
 
             for part_number in part_numbers:
-                query = (
-                    "SELECT * FROM c WHERE c.partNumber = @partNumber OR c.id = @partNumber"
-                )
+                query = "SELECT * FROM c WHERE c.partNumber = @partNumber OR c.id = @partNumber"
                 items = list(
                     container.query_items(
                         query=query,
-                        parameters=[
-                            {"name": "@partNumber", "value": part_number}],
+                        parameters=[{"name": "@partNumber", "value": part_number}],
                         enable_cross_partition_query=True,
                     )
                 )
@@ -485,8 +501,9 @@ class CosmosDbService:
 
         try:
             container = self.database.get_container_client("Suppliers")
-            items = list(container.query_items(
-                query="SELECT * FROM c", enable_cross_partition_query=True))
+            items = list(
+                container.query_items(query="SELECT * FROM c", enable_cross_partition_query=True)
+            )
 
             results: List[Supplier] = []
             for item in items:
@@ -503,10 +520,25 @@ class CosmosDbService:
                         )
                     )
 
-            return results if results else self._generate_mock_suppliers()
+            if results:
+                return results
+            if self.allow_mock_fallbacks:
+                print(
+                    "Warning: No suppliers in Cosmos DB; using mock fallback "
+                    "(CHALLENGE3_ALLOW_MOCK_FALLBACKS=true)."
+                )
+                return self._generate_mock_suppliers()
+            raise RuntimeError("No suppliers found in Cosmos DB container 'Suppliers'.")
         except Exception as e:
-            print(f"Warning: Could not retrieve suppliers: {str(e)}")
-            return self._generate_mock_suppliers()
+            if self.allow_mock_fallbacks:
+                print(
+                    "Warning: Could not retrieve suppliers from Cosmos DB; "
+                    f"using mock fallback ({str(e)})"
+                )
+                return self._generate_mock_suppliers()
+            raise RuntimeError(
+                "Could not retrieve suppliers from Cosmos DB and mock fallback is disabled."
+            ) from e
 
     def _generate_mock_suppliers(self) -> List[Supplier]:
         """Generate mock suppliers."""
@@ -566,8 +598,7 @@ class CosmosDbService:
 
         try:
             container = self.database.get_container_client("ChatHistories")
-            item = container.read_item(
-                item=work_order_id, partition_key=work_order_id)
+            item = container.read_item(item=work_order_id, partition_key=work_order_id)
             return item.get("historyJson")
         except exceptions.CosmosResourceNotFoundError:
             return None

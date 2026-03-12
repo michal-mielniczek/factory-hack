@@ -41,7 +41,9 @@ load_dotenv(override=True)
 class MaintenanceSchedulerAgent:
     """AI Agent for predictive maintenance scheduling"""
 
-    def __init__(self, project_endpoint: str, deployment_name: str, cosmos_service: CosmosDbService):
+    def __init__(
+        self, project_endpoint: str, deployment_name: str, cosmos_service: CosmosDbService
+    ):
         self.project_endpoint = project_endpoint
         self.deployment_name = deployment_name
         self.cosmos_service = cosmos_service
@@ -53,8 +55,7 @@ class MaintenanceSchedulerAgent:
         try:
             return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
         except Exception:
-            print(
-                f"   Warning: Invalid datetime '{value}' from model response. Using fallback.")
+            print(f"   Warning: Invalid datetime '{value}' from model response. Using fallback.")
             return fallback
 
     async def predict_schedule(
@@ -66,9 +67,10 @@ class MaintenanceSchedulerAgent:
         """Predict optimal maintenance schedule using AI"""
 
         context = self._build_context(work_order, history, windows)
-        chat_history_json = await self.cosmos_service.get_machine_chat_history(work_order.machine_id)
-        print(
-            f"   Using persistent chat history for machine: {work_order.machine_id}")
+        chat_history_json = await self.cosmos_service.get_machine_chat_history(
+            work_order.machine_id
+        )
+        print(f"   Using persistent chat history for machine: {work_order.machine_id}")
 
         instructions = """You are a predictive maintenance expert specializing in industrial tire manufacturing equipment.
 
@@ -109,12 +111,16 @@ Always respond in valid JSON format as requested."""
         json_response = self._extract_json(response_text)
         data = json.loads(json_response)
 
-        fallback_window = windows[0] if windows else MaintenanceWindow(
-            id="fallback-window",
-            start_time=datetime.utcnow(),
-            end_time=datetime.utcnow() + timedelta(hours=2),
-            production_impact="Unknown",
-            is_available=True,
+        fallback_window = (
+            windows[0]
+            if windows
+            else MaintenanceWindow(
+                id="fallback-window",
+                start_time=datetime.utcnow(),
+                end_time=datetime.utcnow() + timedelta(hours=2),
+                production_impact="Unknown",
+                is_available=True,
+            )
         )
 
         window_data = data.get("maintenanceWindow", {})
@@ -122,16 +128,18 @@ Always respond in valid JSON format as requested."""
             window_data = {}
 
         window_start = self._safe_parse_datetime(
-            window_data.get("startTime"), fallback_window.start_time or datetime.utcnow())
+            window_data.get("startTime"), fallback_window.start_time or datetime.utcnow()
+        )
         window_end = self._safe_parse_datetime(
-            window_data.get("endTime"), fallback_window.end_time or (window_start + timedelta(hours=2)))
+            window_data.get("endTime"),
+            fallback_window.end_time or (window_start + timedelta(hours=2)),
+        )
 
         # Keep a sane window even if model returns invalid temporal ordering.
         if window_end <= window_start:
             window_end = window_start + timedelta(hours=2)
 
-        scheduled_date = self._safe_parse_datetime(
-            data.get("scheduledDate"), window_start)
+        scheduled_date = self._safe_parse_datetime(data.get("scheduledDate"), window_start)
 
         return MaintenanceSchedule(
             id=f"sched-{datetime.utcnow().timestamp()}",
@@ -143,19 +151,20 @@ Always respond in valid JSON format as requested."""
                 start_time=window_start,
                 end_time=window_end,
                 production_impact=window_data.get(
-                    "productionImpact", fallback_window.production_impact),
-                is_available=window_data.get(
-                    "isAvailable", fallback_window.is_available),
+                    "productionImpact", fallback_window.production_impact
+                ),
+                is_available=window_data.get("isAvailable", fallback_window.is_available),
             ),
             risk_score=data.get("riskScore", 0),
-            predicted_failure_probability=data.get(
-                "predictedFailureProbability", 0),
+            predicted_failure_probability=data.get("predictedFailureProbability", 0),
             recommended_action=data.get("recommendedAction", "SCHEDULED"),
             reasoning=data.get("reasoning", "No reasoning provided."),
             created_at=datetime.utcnow(),
         )
 
-    async def _save_interaction_history(self, machine_id: str, user_prompt: str, assistant_response: str):
+    async def _save_interaction_history(
+        self, machine_id: str, user_prompt: str, assistant_response: str
+    ):
         """Save interaction to Cosmos DB chat history"""
 
         try:
@@ -165,8 +174,7 @@ Always respond in valid JSON format as requested."""
 
             # Append new interaction
             messages.append({"role": "user", "content": user_prompt})
-            messages.append(
-                {"role": "assistant", "content": assistant_response})
+            messages.append({"role": "assistant", "content": assistant_response})
 
             # Keep only last 10 messages
             messages = messages[-10:]
@@ -175,7 +183,12 @@ Always respond in valid JSON format as requested."""
         except Exception as e:
             print(f"   Warning: Could not save chat history: {e}")
 
-    def _build_context(self, work_order: WorkOrder, history: List[MaintenanceHistory], windows: List[MaintenanceWindow]) -> str:
+    def _build_context(
+        self,
+        work_order: WorkOrder,
+        history: List[MaintenanceHistory],
+        windows: List[MaintenanceWindow],
+    ) -> str:
         """Build analysis context for AI"""
 
         lines = [
@@ -195,40 +208,36 @@ Always respond in valid JSON format as requested."""
             lines.append(f"Total maintenance events: {len(history)}")
             lines.append("")
 
-            relevant_history = [
-                h for h in history if h.fault_type == work_order.fault_type]
+            relevant_history = [h for h in history if h.fault_type == work_order.fault_type]
             if relevant_history:
-                lines.append(
-                    f"**Similar fault type ({work_order.fault_type}):**")
+                lines.append(f"**Similar fault type ({work_order.fault_type}):**")
                 lines.append(f"- Occurrences: {len(relevant_history)}")
-                avg_downtime = sum(
-                    h.downtime for h in relevant_history) / len(relevant_history)
-                avg_cost = sum(h.cost for h in relevant_history) / \
-                    len(relevant_history)
+                avg_downtime = sum(h.downtime for h in relevant_history) / len(relevant_history)
+                avg_cost = sum(h.cost for h in relevant_history) / len(relevant_history)
                 lines.append(f"- Average downtime: {avg_downtime:.0f} minutes")
                 lines.append(f"- Average cost: ${avg_cost:.2f}")
 
                 if len(relevant_history) >= 2:
                     dates = sorted(
-                        [h.occurrence_date for h in relevant_history if h.occurrence_date])
+                        [h.occurrence_date for h in relevant_history if h.occurrence_date]
+                    )
                     if len(dates) >= 2:
-                        intervals = [
-                            (dates[i] - dates[i - 1]).days for i in range(1, len(dates))]
+                        intervals = [(dates[i] - dates[i - 1]).days for i in range(1, len(dates))]
                         avg_interval = sum(intervals) / len(intervals)
                         lines.append(
-                            f"- Mean Time Between Failures (MTBF): {avg_interval:.0f} days")
+                            f"- Mean Time Between Failures (MTBF): {avg_interval:.0f} days"
+                        )
 
                         last_occurrence = max(
-                            h.occurrence_date for h in relevant_history if h.occurrence_date)
-                        days_since_last = (
-                            datetime.utcnow() - last_occurrence).days
+                            h.occurrence_date for h in relevant_history if h.occurrence_date
+                        )
+                        days_since_last = (datetime.utcnow() - last_occurrence).days
+                        lines.append(f"- Days since last occurrence: {days_since_last:.0f}")
                         lines.append(
-                            f"- Days since last occurrence: {days_since_last:.0f}")
-                        lines.append(
-                            f"- Failure cycle progress: {(days_since_last / avg_interval * 100):.1f}%")
+                            f"- Failure cycle progress: {(days_since_last / avg_interval * 100):.1f}%"
+                        )
             else:
-                lines.append(
-                    f"**No previous occurrences of {work_order.fault_type} fault type.**")
+                lines.append(f"**No previous occurrences of {work_order.fault_type} fault type.**")
 
             lines.append("")
             lines.append("**Recent maintenance events (all types):**")
@@ -239,21 +248,18 @@ Always respond in valid JSON format as requested."""
                     )
         else:
             lines.append("⚠️  No historical maintenance data available.")
-            lines.append(
-                "Risk assessment will be based on fault type and priority only.")
+            lines.append("Risk assessment will be based on fault type and priority only.")
 
         lines.extend(["", "## Available Maintenance Windows (Next 14 Days)"])
 
         if windows:
             for window in windows[:10]:
                 if window.start_time and window.end_time:
-                    duration = (window.end_time -
-                                window.start_time).total_seconds() / 3600
+                    duration = (window.end_time - window.start_time).total_seconds() / 3600
                     lines.append(
                         f"- **{window.start_time.strftime('%Y-%m-%d %H:%M')} to {window.end_time.strftime('%H:%M')}** ({duration:.1f}h)"
                     )
-                    lines.append(
-                        f"  * Production Impact: {window.production_impact}")
+                    lines.append(f"  * Production Impact: {window.production_impact}")
                     lines.append(f"  * Window ID: {window.id}")
         else:
             lines.append("⚠️  No maintenance windows available!")
@@ -301,7 +307,7 @@ Always respond in valid JSON format as requested."""
         start = response.find("{")
         if start >= 0:
             end = response.rfind("}")
-            return response[start: end + 1]
+            return response[start : end + 1]
 
         raise Exception("Could not extract JSON from agent response")
 
@@ -320,22 +326,23 @@ async def main():
     cosmos_endpoint = os.getenv("COSMOS_ENDPOINT")
     cosmos_key = os.getenv("COSMOS_KEY")
     database_name = os.getenv("COSMOS_DATABASE_NAME")
-    foundry_project_endpoint = os.getenv(
-        "AZURE_AI_PROJECT_ENDPOINT") or os.getenv("AI_FOUNDRY_PROJECT_ENDPOINT")
+    foundry_project_endpoint = os.getenv("AZURE_AI_PROJECT_ENDPOINT") or os.getenv(
+        "AI_FOUNDRY_PROJECT_ENDPOINT"
+    )
     deployment_name = os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4.1")
-    app_insights_connection = os.getenv(
-        "APPLICATIONINSIGHTS_CONNECTION_STRING")
+    app_insights_connection = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
 
     # Validate
     if not all([cosmos_endpoint, cosmos_key, database_name, foundry_project_endpoint]):
         print("Error: Missing required environment variables.")
-        print("Required: COSMOS_ENDPOINT, COSMOS_KEY, COSMOS_DATABASE_NAME, AZURE_AI_PROJECT_ENDPOINT")
+        print(
+            "Required: COSMOS_ENDPOINT, COSMOS_KEY, COSMOS_DATABASE_NAME, AZURE_AI_PROJECT_ENDPOINT"
+        )
         return
 
     enable_tracing(app_insights_connection)
 
-    cosmos_service = CosmosDbService(
-        cosmos_endpoint, cosmos_key, database_name)
+    cosmos_service = CosmosDbService(cosmos_endpoint, cosmos_key, database_name)
 
     # Register agent in Azure AI Foundry portal
     async with (
@@ -348,14 +355,15 @@ async def main():
             print("   Checking existing agent versions in portal...")
             version_count = 0
             try:
-                async for _ in project_client.agents.list_versions(agent_name="MaintenanceSchedulerAgent"):
+                async for _ in project_client.agents.list_versions(
+                    agent_name="MaintenanceSchedulerAgent"
+                ):
                     version_count += 1
                 print(f"   Found {version_count} existing versions")
             except Exception as e:
                 print(f"   Error checking versions: {e}")
 
-            print(
-                f"   Creating new version (will be version #{version_count + 1})...")
+            print(f"   Creating new version (will be version #{version_count + 1})...")
 
             definition = PromptAgentDefinition(
                 model=deployment_name,
@@ -375,8 +383,7 @@ Consider factors like:
 Output JSON with: scheduled_date, risk_score (0-100), predicted_failure_probability (0-1), recommended_action (IMMEDIATE/URGENT/SCHEDULED/MONITOR), and reasoning.""",
             )
 
-            print(
-                "   Registering MaintenanceSchedulerAgent in Azure AI Foundry portal...")
+            print("   Registering MaintenanceSchedulerAgent in Azure AI Foundry portal...")
             registered_agent = await project_client.agents.create_version(
                 agent_name="MaintenanceSchedulerAgent",
                 definition=definition,
@@ -389,11 +396,14 @@ Output JSON with: scheduled_date, risk_score (0-100), predicted_failure_probabil
             )
             print("   ✅ New version created!")
             print(
-                f"      Agent ID: {registered_agent.id if hasattr(registered_agent, 'id') else 'N/A'}")
+                f"      Agent ID: {registered_agent.id if hasattr(registered_agent, 'id') else 'N/A'}"
+            )
 
             print("   Verifying creation...")
             verify_count = 0
-            async for _ in project_client.agents.list_versions(agent_name="MaintenanceSchedulerAgent"):
+            async for _ in project_client.agents.list_versions(
+                agent_name="MaintenanceSchedulerAgent"
+            ):
                 verify_count += 1
             print(f"   Total versions now in portal: {verify_count}")
             print("   Check portal at: https://ai.azure.com\n")
@@ -402,7 +412,8 @@ Output JSON with: scheduled_date, risk_score (0-100), predicted_failure_probabil
             logger.warning(f"Could not register agent in portal: {e}")
 
     agent_service = MaintenanceSchedulerAgent(
-        foundry_project_endpoint, deployment_name, cosmos_service)
+        foundry_project_endpoint, deployment_name, cosmos_service
+    )
 
     # Get work order
     print("1. Retrieving work order...")
@@ -434,16 +445,13 @@ Output JSON with: scheduled_date, risk_score (0-100), predicted_failure_probabil
         print("=== Predictive Maintenance Schedule ===")
         print(f"Schedule ID: {schedule.id}")
         print(f"Machine: {schedule.machine_id}")
-        print(
-            f"Scheduled Date: {schedule.scheduled_date.strftime('%Y-%m-%d %H:%M')}")
+        print(f"Scheduled Date: {schedule.scheduled_date.strftime('%Y-%m-%d %H:%M')}")
         print(
             f"Window: {schedule.maintenance_window.start_time.strftime('%H:%M')} - {schedule.maintenance_window.end_time.strftime('%H:%M')}"
         )
-        print(
-            f"Production Impact: {schedule.maintenance_window.production_impact}")
+        print(f"Production Impact: {schedule.maintenance_window.production_impact}")
         print(f"Risk Score: {schedule.risk_score}/100")
-        print(
-            f"Failure Probability: {schedule.predicted_failure_probability * 100:.1f}%")
+        print(f"Failure Probability: {schedule.predicted_failure_probability * 100:.1f}%")
         print(f"Recommended Action: {schedule.recommended_action}")
         print("\nReasoning:")
         print(f"{schedule.reasoning}")

@@ -182,39 +182,54 @@ public static class RepairPlannerAgentFactory
     /// </summary>
     private static IEnumerable<AITool> CreateCosmosTools(CosmosDbService cosmosService)
     {
-        // Tool to get required skills for a fault type (mock implementation)
+        // Tool to get matching technicians for a fault type from Cosmos DB.
         yield return AIFunctionFactory.Create(
-            (string faultType) =>
+            async (string faultType) =>
             {
                 var skills = GetSkillsForFault(faultType);
-                // Return mock technicians with matching skills
-                var mockTechnicians = new[]
-                {
-                    new { id = "tech-001", name = "John Smith", skills = skills.Take(3).ToArray(), available = true, department = "Maintenance" },
-                    new { id = "tech-002", name = "Jane Doe", skills = skills.Skip(1).Take(3).ToArray(), available = true, department = "Maintenance" },
-                    new { id = "tech-003", name = "Bob Wilson", skills = skills.Take(2).ToArray(), available = true, department = "Maintenance" }
-                };
-                return JsonSerializer.Serialize(mockTechnicians);
+                var technicians = await cosmosService.GetAvailableTechniciansWithSkillsAsync(
+                    skills,
+                    department: "Maintenance",
+                    requireAllSkills: false);
+
+                var technicianResults = technicians
+                    .OrderByDescending(technician => skills.Count(skill =>
+                        technician.Skills.Contains(skill, StringComparer.OrdinalIgnoreCase)))
+                    .ThenBy(technician => technician.AssignedWorkOrders.Count)
+                    .Select(technician => new
+                    {
+                        id = technician.Id,
+                        name = technician.Name,
+                        skills = technician.Skills,
+                        available = technician.Available,
+                        department = technician.Department,
+                        certifications = technician.Certifications,
+                    });
+
+                return JsonSerializer.Serialize(technicianResults);
             },
             "GetAvailableTechnicians",
             "Gets available technicians with the required skills for a given fault type. " +
             "Parameters: faultType (the diagnosed fault type like 'curing_temperature_excessive', 'building_drum_vibration')");
 
-        // Tool to get required parts for a fault type (mock implementation)
+        // Tool to get required parts for a fault type from Cosmos DB.
         yield return AIFunctionFactory.Create(
-            (string faultType) =>
+            async (string faultType) =>
             {
                 var partNumbers = GetPartsForFault(faultType);
-                // Return mock parts with inventory info
-                var mockParts = partNumbers.Select((pn, i) => new
+                var parts = await cosmosService.GetPartsByPartNumbersAsync(partNumbers);
+                var partResults = parts.Select(part => new
                 {
-                    partNumber = pn,
-                    name = $"Part {pn}",
-                    quantityInStock = 5 + i,
-                    available = true,
-                    location = $"Warehouse-{(char)('A' + i)}"
-                }).ToArray();
-                return JsonSerializer.Serialize(mockParts);
+                    partId = part.Id,
+                    partNumber = part.PartNumber,
+                    partName = part.Name,
+                    quantityInStock = part.QuantityInStock,
+                    available = part.QuantityInStock > 0,
+                    location = part.Location,
+                    unitCost = part.UnitCost,
+                });
+
+                return JsonSerializer.Serialize(partResults);
             },
             "GetAvailableParts",
             "Gets the required parts for a given fault type from inventory. " +
