@@ -1,9 +1,7 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Azure.AI.Projects;
-using Azure.AI.Projects.OpenAI;
-using Microsoft.Agents.AI;
+using Microsoft.Extensions.Logging;
 using RepairPlanner.Models;
 using RepairPlanner.Services;
 
@@ -16,38 +14,20 @@ public sealed class RepairPlannerAgent(
     string modelDeploymentName,
     ILogger<RepairPlannerAgent> logger)
 {
-    public const string AgentName = "RepairPlannerAgent";
-
+    private const string AgentName = "RepairPlannerAgent";
     private const string AgentInstructions = """
         You are a Repair Planner Agent for tire manufacturing equipment.
-        Generate a repair plan with tasks, timeline, and resource allocation.
-        Return the response as valid JSON matching the WorkOrder schema.
-
-        Output JSON with these fields:
-        - workOrderNumber, machineId, title, description
-        - type: "corrective" | "preventive" | "emergency"
-        - priority: "critical" | "high" | "medium" | "low"
-        - status, assignedTo, notes
-        - estimatedDuration: integer minutes
-        - requiredParts: [{ partId, partNumber, partName, quantity, isAvailable }]
-        - partsUsed: [{ partId, partNumber, partName, quantity, isAvailable }]
-        - tasks: [{ sequence, title, description, estimatedDurationMinutes, requiredSkills, safetyNotes }]
-
-        Rules:
-        - Assign the most qualified available technician from the provided candidates.
-        - Include only relevant parts and preserve inventory availability.
-        - Tasks must be ordered, actionable, and safe for industrial maintenance.
-        - Output JSON only.
+        Generate repair plans as valid JSON matching the workshop WorkOrder schema.
+        Keep durations as integer minutes and keep output grounded to the provided technician and parts context.
         """;
 
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
-        WriteIndented = true,
     };
 
-    public async Task EnsureAgentVersionAsync(CancellationToken ct = default)
+    public async Task EnsureAgentVersionAsync(CancellationToken cancellationToken = default)
     {
         var definition = new PromptAgentDefinition(model: modelDeploymentName)
         {
@@ -57,26 +37,38 @@ public sealed class RepairPlannerAgent(
         await projectClient.Agents.CreateAgentVersionAsync(
             AgentName,
             new AgentVersionCreationOptions(definition),
-            ct);
+            cancellationToken);
     }
 
-    public async Task<WorkOrder> PlanAndCreateWorkOrderAsync(DiagnosedFault fault, CancellationToken ct = default)
+    public async Task<WorkOrder> PlanAndCreateWorkOrderAsync(
+        DiagnosedFault fault,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(fault);
 
         var requiredSkills = faultMapping.GetRequiredSkills(fault.FaultType);
         var requiredPartNumbers = faultMapping.GetRequiredParts(fault.FaultType);
 
-        var technicians = await cosmosDb.GetAvailableTechniciansWithSkillsAsync(requiredSkills, cancellationToken: ct);
-        var parts = await cosmosDb.GetPartsByPartNumbersAsync(requiredPartNumbers, cancellationToken: ct);
+        var technicians = await cosmosDb.GetAvailableTechniciansWithSkillsAsync(
+            requiredSkills,
+            department: "Maintenance",
+            requireAllSkills: false,
+            cancellationToken: cancellationToken);
+
+        var parts = await cosmosDb.GetPartsByPartNumbersAsync(
+            requiredPartNumbers,
+            cancellationToken: cancellationToken);
+
         var selectedTechnician = SelectBestTechnician(technicians, requiredSkills);
+        var workOrder = BuildDeterministicWorkOrder(fault, selectedTechnician, parts, requiredSkills);
 
-        var prompt = BuildPrompt(fault, requiredSkills, technicians, parts, selectedTechnician);
-        var workOrder = await GenerateWorkOrderAsync(prompt, ct);
-        NormalizeWorkOrder(workOrder, fault, selectedTechnician, parts);
+        await cosmosDb.CreateWorkOrderAsync(workOrder, cancellationToken);
 
-        var createdId = await cosmosDb.CreateWorkOrderAsync(workOrder, ct);
-        workOrder.Id = createdId;
+        logger.LogInformation(
+            "Created work order {WorkOrderId} for machine {MachineId} and fault {FaultType}",
+            workOrder.Id,
+            workOrder.MachineId,
+            workOrder.FaultType);
 
         return workOrder;
     }
@@ -85,172 +77,125 @@ public sealed class RepairPlannerAgent(
         IReadOnlyList<Technician> technicians,
         IReadOnlyList<string> requiredSkills)
     {
-        if (technicians.Count == 0)
-        {
-            return null;
-        }
-
         return technicians
             .OrderByDescending(technician => requiredSkills.Count(skill =>
                 technician.Skills.Contains(skill, StringComparer.OrdinalIgnoreCase)))
-            .ThenBy(technician => technician.CurrentAssignments.Count)
+            .ThenBy(technician => technician.AssignedWorkOrders.Count)
             .ThenBy(technician => technician.Name, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
     }
 
-    private async Task<WorkOrder> GenerateWorkOrderAsync(string prompt, CancellationToken ct)
-    {
-        try
-        {
-            var agent = projectClient.GetAIAgent(name: AgentName);
-            var response = await agent.RunAsync(prompt, thread: null, options: null, cancellationToken: ct);
-
-            if (string.IsNullOrWhiteSpace(response.Text))
-            {
-                throw new InvalidOperationException("Agent returned an empty response.");
-            }
-
-            var workOrder = JsonSerializer.Deserialize<WorkOrder>(response.Text, JsonOptions);
-            return workOrder ?? throw new InvalidOperationException("Agent response could not be parsed as WorkOrder JSON.");
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Falling back to deterministic work-order draft because agent invocation failed.");
-            return new WorkOrder();
-        }
-    }
-
-    private static string BuildPrompt(
-        DiagnosedFault fault,
-        IReadOnlyList<string> requiredSkills,
-        IReadOnlyList<Technician> technicians,
-        IReadOnlyList<Part> parts,
-        Technician? selectedTechnician)
-    {
-        var builder = new StringBuilder();
-        builder.AppendLine("Create a corrective maintenance work order from this diagnosed fault.");
-        builder.AppendLine();
-        builder.AppendLine("Diagnosed fault:");
-        builder.AppendLine(JsonSerializer.Serialize(fault, JsonOptions));
-        builder.AppendLine();
-        builder.AppendLine("Required skills:");
-        builder.AppendLine(JsonSerializer.Serialize(requiredSkills, JsonOptions));
-        builder.AppendLine();
-        builder.AppendLine("Candidate technicians:");
-        builder.AppendLine(JsonSerializer.Serialize(technicians, JsonOptions));
-        builder.AppendLine();
-        builder.AppendLine("Recommended technician:");
-        builder.AppendLine(JsonSerializer.Serialize(selectedTechnician, JsonOptions));
-        builder.AppendLine();
-        builder.AppendLine("Available parts:");
-        builder.AppendLine(JsonSerializer.Serialize(parts, JsonOptions));
-        builder.AppendLine();
-        builder.AppendLine("Return JSON only.");
-
-        return builder.ToString();
-    }
-
-    private static void NormalizeWorkOrder(
-        WorkOrder workOrder,
+    private static WorkOrder BuildDeterministicWorkOrder(
         DiagnosedFault fault,
         Technician? selectedTechnician,
-        IReadOnlyList<Part> parts)
+        IReadOnlyList<Part> parts,
+        IReadOnlyList<string> requiredSkills)
     {
-        workOrder.Id = string.IsNullOrWhiteSpace(workOrder.Id)
-            ? $"wo-{DateTimeOffset.UtcNow:yyyy}-{Guid.NewGuid():N}"[..16]
-            : workOrder.Id;
-        workOrder.WorkOrderNumber ??= $"WO-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}";
-        workOrder.MachineId = string.IsNullOrWhiteSpace(workOrder.MachineId) ? fault.MachineId : workOrder.MachineId;
-        workOrder.FaultType = string.IsNullOrWhiteSpace(workOrder.FaultType) ? fault.FaultType : workOrder.FaultType;
-        workOrder.Title ??= $"Repair Plan - {fault.FaultType}";
-        workOrder.Description ??= fault.RootCause ?? $"Repair plan for {fault.FaultType}";
-        workOrder.Type = NormalizeType(workOrder.Type);
-        workOrder.Priority = NormalizePriority(workOrder.Priority, fault.Severity);
-        workOrder.Status ??= "Created";
-        workOrder.AssignedTo ??= selectedTechnician?.Id;
-        workOrder.AssignedTechnician ??= selectedTechnician;
-        workOrder.CreatedDate ??= DateTimeOffset.UtcNow;
-        workOrder.EstimatedDuration ??= workOrder.Tasks.Sum(task => task.EstimatedDurationMinutes);
-        workOrder.Notes ??= "Generated by RepairPlannerAgent.";
+        var normalizedPriority = NormalizePriority(fault.Severity);
+        var requiredParts = parts
+            .Select(part => new RequiredPart
+            {
+                PartId = part.Id,
+                PartNumber = part.PartNumber,
+                PartName = part.Name,
+                Quantity = 1,
+                IsAvailable = part.QuantityInStock > 0,
+            })
+            .ToList();
 
-        if (workOrder.Tasks.Count == 0)
-        {
-            workOrder.Tasks.AddRange(CreateFallbackTasks(fault));
-        }
+        var repairTasks = BuildTasks(fault, requiredSkills, requiredParts);
+        var estimatedDuration = repairTasks.Sum(task => task.EstimatedDurationMinutes);
 
-        var requiredParts = parts.Select(part => new WorkOrderPartUsage
+        return new WorkOrder
         {
-            PartId = part.Id,
-            PartNumber = part.PartNumber,
-            PartName = part.Name,
-            Quantity = 1,
-            IsAvailable = part.QuantityInStock > 0,
-        }).ToList();
-
-        if (workOrder.RequiredParts.Count == 0)
-        {
-            workOrder.RequiredParts = requiredParts;
-        }
-
-        if (workOrder.PartsUsed.Count == 0)
-        {
-            workOrder.PartsUsed = requiredParts;
-        }
-    }
-
-    private static string NormalizeType(string? type)
-    {
-        return type?.ToLowerInvariant() switch
-        {
-            "preventive" => "preventive",
-            "emergency" => "emergency",
-            _ => "corrective",
+            Id = $"wo-{DateTimeOffset.UtcNow:yyyy}-{Guid.NewGuid():N}"[..19],
+            WorkOrderNumber = $"WO-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}",
+            MachineId = fault.MachineId,
+            FaultType = fault.FaultType,
+            Title = $"Repair {fault.FaultType.Replace('_', ' ')} on {fault.MachineId}",
+            Description = fault.RootCause ?? "Investigate and repair diagnosed fault.",
+            Type = normalizedPriority is "critical" ? "emergency" : "corrective",
+            Priority = normalizedPriority,
+            Status = "scheduled",
+            AssignedTo = selectedTechnician?.Id,
+            Notes = BuildNotes(fault, selectedTechnician, requiredParts),
+            EstimatedDuration = estimatedDuration,
+            CreatedDate = DateTimeOffset.UtcNow,
+            Tasks = repairTasks,
+            RequiredParts = requiredParts,
+            PartsUsed = requiredParts
+                .Where(part => part.IsAvailable)
+                .Select(part => new WorkOrderPartUsage
+                {
+                    PartId = part.PartId,
+                    PartNumber = part.PartNumber,
+                    Quantity = part.Quantity,
+                })
+                .ToList(),
         };
     }
 
-    private static string NormalizePriority(string? priority, string? severity)
-    {
-        var value = (priority ?? severity ?? "medium").ToLowerInvariant();
-        return value switch
-        {
-            "critical" => "critical",
-            "high" => "high",
-            "low" => "low",
-            _ => "medium",
-        };
-    }
-
-    private static IReadOnlyList<RepairTask> CreateFallbackTasks(DiagnosedFault fault)
+    private static List<RepairTask> BuildTasks(
+        DiagnosedFault fault,
+        IReadOnlyList<string> requiredSkills,
+        IReadOnlyList<RequiredPart> requiredParts)
     {
         return
         [
             new RepairTask
             {
                 Sequence = 1,
-                Title = "Lock out and verify machine isolation",
-                Description = $"Safely isolate {fault.MachineId} before inspection.",
+                Title = "Isolate machine and confirm fault",
+                Description = $"Validate {fault.FaultType} on {fault.MachineId} using current telemetry and recent maintenance history.",
                 EstimatedDurationMinutes = 20,
-                RequiredSkills = ["lockout_tagout", "safety_compliance"],
-                SafetyNotes = "Apply LOTO and verify zero-energy state.",
+                RequiredSkills = requiredSkills.ToList(),
+                SafetyNotes = "Follow lockout/tagout before any physical inspection.",
             },
             new RepairTask
             {
                 Sequence = 2,
-                Title = "Inspect and repair root cause",
-                Description = $"Diagnose and repair {fault.FaultType}.",
-                EstimatedDurationMinutes = 60,
-                RequiredSkills = [fault.FaultType],
-                SafetyNotes = "Use machine-specific PPE and follow maintenance manual.",
+                Title = "Inspect affected components",
+                Description = requiredParts.Count == 0
+                    ? "Inspect the faulted subsystem and identify worn or drifting components."
+                    : $"Inspect the subsystem and prepare the required parts: {string.Join(", ", requiredParts.Select(part => part.PartNumber))}.",
+                EstimatedDurationMinutes = 30,
+                RequiredSkills = requiredSkills.ToList(),
+                SafetyNotes = "Use calibrated tools and verify thermal surfaces are safe to access.",
             },
             new RepairTask
             {
                 Sequence = 3,
-                Title = "Validate return to service",
-                Description = "Test the machine and confirm telemetry is back within thresholds.",
-                EstimatedDurationMinutes = 30,
-                RequiredSkills = ["validation", "instrumentation"],
-                SafetyNotes = "Keep operators clear until test cycle completes.",
+                Title = "Repair, validate, and return to service",
+                Description = "Complete the repair, validate machine output against thresholds, and document the result in the work order.",
+                EstimatedDurationMinutes = 40,
+                RequiredSkills = requiredSkills.ToList(),
+                SafetyNotes = "Record post-repair measurements before production restart.",
             },
         ];
     }
+
+    private static string BuildNotes(
+        DiagnosedFault fault,
+        Technician? selectedTechnician,
+        IReadOnlyList<RequiredPart> requiredParts)
+    {
+        var technicianNote = selectedTechnician is null
+            ? "No available technician matched the required skill profile."
+            : $"Assigned technician: {selectedTechnician.Name} ({selectedTechnician.Id}).";
+
+        var partsNote = requiredParts.Count == 0
+            ? "No replacement parts mapped for this fault."
+            : $"Required parts: {string.Join(", ", requiredParts.Select(part => $"{part.PartNumber}={(part.IsAvailable ? "in stock" : "order required")}"))}.";
+
+        return $"{technicianNote} {partsNote}";
+    }
+
+    private static string NormalizePriority(string? severity) =>
+        severity?.Trim().ToLowerInvariant() switch
+        {
+            "critical" => "critical",
+            "high" => "high",
+            "medium" => "medium",
+            _ => "low",
+        };
 }

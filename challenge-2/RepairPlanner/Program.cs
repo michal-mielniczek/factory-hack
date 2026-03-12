@@ -1,88 +1,72 @@
 using System.Text.Json;
 using Azure.AI.Projects;
 using Azure.Identity;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RepairPlanner;
 using RepairPlanner.Models;
 using RepairPlanner.Services;
 
-var services = new ServiceCollection();
-
-services.AddLogging(builder =>
+var loggerFactory = LoggerFactory.Create(builder => builder.AddSimpleConsole(options =>
 {
-    builder.AddSimpleConsole(options => options.SingleLine = true);
-    builder.SetMinimumLevel(LogLevel.Information);
-});
+    options.SingleLine = true;
+    options.TimestampFormat = "HH:mm:ss ";
+}));
 
-var projectEndpoint = GetRequiredEnvVar("AZURE_AI_PROJECT_ENDPOINT");
+var aiProjectEndpoint = GetRequiredEnvVar("AZURE_AI_PROJECT_ENDPOINT");
 var modelDeploymentName = GetRequiredEnvVar("MODEL_DEPLOYMENT_NAME");
 var cosmosEndpoint = GetRequiredEnvVar("COSMOS_ENDPOINT");
 var cosmosKey = GetRequiredEnvVar("COSMOS_KEY");
 var cosmosDatabaseName = GetRequiredEnvVar("COSMOS_DATABASE_NAME");
 
-services.AddSingleton(new AIProjectClient(new Uri(projectEndpoint), new DefaultAzureCredential()));
-services.AddSingleton(new CosmosDbOptions(cosmosEndpoint, cosmosKey, cosmosDatabaseName));
-services.AddSingleton<CosmosDbService>();
-services.AddSingleton<IFaultMappingService, FaultMappingService>();
-services.AddSingleton(sp => new RepairPlannerAgent(
-    sp.GetRequiredService<AIProjectClient>(),
-    sp.GetRequiredService<CosmosDbService>(),
-    sp.GetRequiredService<IFaultMappingService>(),
+var projectClient = new AIProjectClient(new Uri(aiProjectEndpoint), new DefaultAzureCredential());
+using var cosmosDbService = new CosmosDbService(
+    cosmosEndpoint,
+    cosmosKey,
+    cosmosDatabaseName,
+    loggerFactory.CreateLogger<CosmosDbService>());
+
+var agent = new RepairPlannerAgent(
+    projectClient,
+    cosmosDbService,
+    new FaultMappingService(),
     modelDeploymentName,
-    sp.GetRequiredService<ILogger<RepairPlannerAgent>>()));
+    loggerFactory.CreateLogger<RepairPlannerAgent>());
 
-using var provider = services.BuildServiceProvider();
-var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger("RepairPlanner");
-var agent = provider.GetRequiredService<RepairPlannerAgent>();
+var diagnosedFault = await LoadDiagnosedFaultAsync(args);
+await agent.EnsureAgentVersionAsync();
+var workOrder = await agent.PlanAndCreateWorkOrderAsync(diagnosedFault);
 
-try
+Console.WriteLine(JsonSerializer.Serialize(workOrder, new JsonSerializerOptions
 {
-    var fault = await LoadFaultAsync(args);
+    WriteIndented = true,
+}));
 
-    logger.LogInformation("Ensuring RepairPlannerAgent version exists in Foundry...");
-    await agent.EnsureAgentVersionAsync();
-
-    logger.LogInformation("Planning work order for machine {MachineId} and fault {FaultType}", fault.MachineId, fault.FaultType);
-    var workOrder = await agent.PlanAndCreateWorkOrderAsync(fault);
-
-    Console.WriteLine(JsonSerializer.Serialize(workOrder, RepairPlannerAgent.JsonOptions));
-}
-catch (Exception ex)
+static async Task<DiagnosedFault> LoadDiagnosedFaultAsync(string[] args)
 {
-    logger.LogError(ex, "Repair planner failed");
-    Environment.ExitCode = 1;
-}
-
-static async Task<DiagnosedFault> LoadFaultAsync(IReadOnlyList<string> args)
-{
-    if (args.Count == 0)
+    if (args.Length == 0)
     {
         return new DiagnosedFault
         {
             MachineId = "machine-001",
             FaultType = "curing_temperature_excessive",
-            RootCause = "Heating element drift",
+            RootCause = "Thermocouple drift causing heater overrun.",
             Severity = "High",
             DetectedAt = DateTimeOffset.UtcNow,
             Metadata = new Dictionary<string, object?>
             {
                 ["metric"] = "curing_temperature",
-                ["value"] = 179.2,
-                ["threshold"] = 178,
+                ["observedValue"] = 179.2,
+                ["warningThreshold"] = 178.0,
             },
         };
     }
 
-    var input = args[0];
-    var content = File.Exists(input) ? await File.ReadAllTextAsync(input) : input;
-    var fault = JsonSerializer.Deserialize<DiagnosedFault>(content, RepairPlannerAgent.JsonOptions);
-
-    return fault ?? throw new InvalidOperationException("Could not deserialize diagnosed fault input.");
+    var source = args[0];
+    var payload = File.Exists(source) ? await File.ReadAllTextAsync(source) : source;
+    return JsonSerializer.Deserialize<DiagnosedFault>(payload, RepairPlannerAgent.JsonOptions)
+        ?? throw new InvalidOperationException("Could not deserialize diagnosed fault payload.");
 }
 
-static string GetRequiredEnvVar(string name)
-{
-    return Environment.GetEnvironmentVariable(name)
-        ?? throw new InvalidOperationException($"Environment variable '{name}' is required.");
-}
+static string GetRequiredEnvVar(string name) =>
+    Environment.GetEnvironmentVariable(name)
+    ?? throw new InvalidOperationException($"{name} environment variable is required.");

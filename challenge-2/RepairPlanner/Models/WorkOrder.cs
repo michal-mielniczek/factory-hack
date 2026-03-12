@@ -11,7 +11,7 @@ public sealed class WorkOrder
 
     [JsonPropertyName("workOrderNumber")]
     [JsonProperty("workOrderNumber")]
-    public string? WorkOrderNumber { get; set; }
+    public string WorkOrderNumber { get; set; } = string.Empty;
 
     [JsonPropertyName("machineId")]
     [JsonProperty("machineId")]
@@ -19,57 +19,91 @@ public sealed class WorkOrder
 
     [JsonPropertyName("faultType")]
     [JsonProperty("faultType")]
-    public string? FaultType { get; set; }
+    public string FaultType { get; set; } = string.Empty;
 
     [JsonPropertyName("title")]
     [JsonProperty("title")]
-    public string? Title { get; set; }
+    public string Title { get; set; } = string.Empty;
 
     [JsonPropertyName("description")]
     [JsonProperty("description")]
-    public string? Description { get; set; }
+    public string Description { get; set; } = string.Empty;
 
     [JsonPropertyName("type")]
     [JsonProperty("type")]
-    public string? Type { get; set; }
+    public string Type { get; set; } = "corrective";
 
     [JsonPropertyName("priority")]
     [JsonProperty("priority")]
-    public string? Priority { get; set; }
+    public string Priority { get; set; } = "medium";
 
     [JsonPropertyName("status")]
     [JsonProperty("status")]
-    public string? Status { get; set; }
+    public string Status { get; set; } = "scheduled";
 
     [JsonPropertyName("assignedTo")]
     [JsonProperty("assignedTo")]
     public string? AssignedTo { get; set; }
 
-    [JsonPropertyName("assignedTechnician")]
-    [JsonProperty("assignedTechnician")]
-    public Technician? AssignedTechnician { get; set; }
-
-    [JsonPropertyName("createdDate")]
-    [JsonProperty("createdDate")]
-    public DateTimeOffset? CreatedDate { get; set; }
+    [JsonPropertyName("notes")]
+    [JsonProperty("notes")]
+    public string? Notes { get; set; }
 
     [JsonPropertyName("estimatedDuration")]
     [JsonProperty("estimatedDuration")]
-    public int? EstimatedDuration { get; set; }
+    public int EstimatedDuration { get; set; }
 
-    [JsonPropertyName("requiredParts")]
-    [JsonProperty("requiredParts")]
-    public List<WorkOrderPartUsage> RequiredParts { get; set; } = [];
-
-    [JsonPropertyName("partsUsed")]
-    [JsonProperty("partsUsed")]
-    public List<WorkOrderPartUsage> PartsUsed { get; set; } = [];
+    [JsonPropertyName("createdDate")]
+    [JsonProperty("createdDate")]
+    public DateTimeOffset CreatedDate { get; set; }
 
     [JsonPropertyName("tasks")]
     [JsonProperty("tasks")]
     public List<RepairTask> Tasks { get; set; } = [];
 
-    [JsonPropertyName("notes")]
-    [JsonProperty("notes")]
-    public string? Notes { get; set; }
+    [JsonPropertyName("requiredParts")]
+    [JsonProperty("requiredParts")]
+    public List<RequiredPart> RequiredParts { get; set; } = [];
+
+    [JsonPropertyName("partsUsed")]
+    [JsonProperty("partsUsed")]
+    public List<WorkOrderPartUsage> PartsUsed { get; set; } = [];
+}
+
+public sealed class RequiredPart
+{
+    [JsonPropertyName("partId")]
+    [JsonProperty("partId")]
+    public string PartId { get; set; } = string.Empty;
+
+    [JsonPropertyName("partNumber")]
+    [JsonProperty("partNumber")]
+    public string PartNumber { get; set; } = string.Empty;
+
+    [JsonPropertyName("partName")]
+    [JsonProperty("partName")]
+    public string PartName { get; set; } = string.Empty;
+
+    [JsonPropertyName("quantity")]
+    [JsonProperty("quantity")]
+    public int Quantity { get; set; }
+
+    [JsonPropertyName("isAvailable")]
+    [JsonProperty("isAvailable")]
+    public bool IsAvailable { get; set; }
+}
+
+public sealed class WorkOrderPartUsage
+{
+    [JsonPropertyName("partId")]
+    [JsonProperty("partId")]
+    public string PartId { get; set; } = string.Empty;
+
+    [JsonPropertyName("partNumber")]
+    [JsonProperty("partNumber")]
+    public string PartNumber { get; set; } = string.Empty;
+
+    [JsonPropertyName("quantity")]
+    [JsonProperty("quantity")]
+    public int Quantity { get; set; }
 }

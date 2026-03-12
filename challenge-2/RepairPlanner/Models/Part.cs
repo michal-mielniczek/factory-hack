@@ -19,21 +19,17 @@ public sealed class Part
 
     [JsonPropertyName("category")]
     [JsonProperty("category")]
-    public string? Category { get; set; }
+    public string Category { get; set; } = string.Empty;
 
     [JsonPropertyName("quantityInStock")]
     [JsonProperty("quantityInStock")]
     public int QuantityInStock { get; set; }
 
-    [JsonPropertyName("reorderLevel")]
-    [JsonProperty("reorderLevel")]
-    public int? ReorderLevel { get; set; }
+    [JsonPropertyName("location")]
+    [JsonProperty("location")]
+    public string? Location { get; set; }
 
     [JsonPropertyName("unitCost")]
     [JsonProperty("unitCost")]
     public decimal? UnitCost { get; set; }
-
-    [JsonPropertyName("location")]
-    [JsonProperty("location")]
-    public string? Location { get; set; }
 }

@@ -58,7 +58,7 @@ def setup_cosmos_db():
     cosmos_client = CosmosClient(os.environ['COSMOS_ENDPOINT'], os.environ['COSMOS_KEY'])
     
     # Create database
-    database_name = "FactoryOpsDB"
+    database_name = os.environ.get('COSMOS_DATABASE_NAME') or os.environ.get('COSMOS_DATABASE') or "FactoryOpsDB"
     try:
         database = cosmos_client.create_database_if_not_exists(id=database_name)
         print(f"✅ Database '{database_name}' ready")
@@ -239,8 +239,12 @@ python3 seed_blob_wiki.py
 
 # Clean up uploader script
 rm seed_blob_wiki.py
-echo "COSMOS_DATABASE_NAME=\"FactoryOpsDB\"" >> ../.env
-echo "COSMOS_DATABASE=\"FactoryOpsDB\"" >> ../.env
+if ! grep -q '^COSMOS_DATABASE_NAME=' ../.env; then
+    echo "COSMOS_DATABASE_NAME=\"${COSMOS_DATABASE_NAME:-FactoryOpsDB}\"" >> ../.env
+fi
+if ! grep -q '^COSMOS_DATABASE=' ../.env; then
+    echo "COSMOS_DATABASE=\"${COSMOS_DATABASE_NAME:-FactoryOpsDB}\"" >> ../.env
+fi
 
 echo "✅ Blob upload complete!"
 

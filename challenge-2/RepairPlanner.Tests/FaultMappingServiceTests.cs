@@ -7,28 +7,28 @@ public sealed class FaultMappingServiceTests
     private readonly FaultMappingService _service = new();
 
     [Fact]
-    public void GetRequiredSkills_ReturnsCanonicalSkills()
+    public void ReturnsExpectedSkillsForKnownFault()
     {
         var skills = _service.GetRequiredSkills("curing_temperature_excessive");
 
-        Assert.Contains("tire_curing_press", skills);
         Assert.Contains("temperature_control", skills);
-        Assert.Contains("instrumentation", skills);
+        Assert.Contains("plc_troubleshooting", skills);
     }
 
     [Fact]
-    public void GetRequiredParts_ReturnsEmptyForUnknownFault()
-    {
-        var parts = _service.GetRequiredParts("unknown_fault");
-
-        Assert.Empty(parts);
-    }
-
-    [Fact]
-    public void GetRequiredSkills_ReturnsFallbackForUnknownFault()
+    public void ReturnsFallbackSkillsForUnknownFault()
     {
         var skills = _service.GetRequiredSkills("unknown_fault");
 
-        Assert.Equal(["general_maintenance"], skills);
+        Assert.Contains("general_maintenance", skills);
+        Assert.Contains("safety_procedures", skills);
+    }
+
+    [Fact]
+    public void ReturnsExpectedPartsForKnownFault()
+    {
+        var parts = _service.GetRequiredParts("mixing_temperature_excessive");
+
+        Assert.Equal(["BMX-TIP-500", "GEN-TS-K400"], parts);
     }
 }

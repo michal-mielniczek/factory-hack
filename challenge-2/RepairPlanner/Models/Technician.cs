@@ -9,21 +9,13 @@ public sealed class Technician
     [JsonProperty("id")]
     public string Id { get; set; } = string.Empty;
 
-    [JsonPropertyName("employeeId")]
-    [JsonProperty("employeeId")]
-    public string? EmployeeId { get; set; }
-
     [JsonPropertyName("name")]
     [JsonProperty("name")]
     public string Name { get; set; } = string.Empty;
 
-    [JsonPropertyName("role")]
-    [JsonProperty("role")]
-    public string? Role { get; set; }
-
     [JsonPropertyName("department")]
     [JsonProperty("department")]
-    public string? Department { get; set; }
+    public string Department { get; set; } = string.Empty;
 
     [JsonPropertyName("skills")]
     [JsonProperty("skills")]
@@ -37,7 +29,7 @@ public sealed class Technician
     [JsonProperty("available")]
     public bool Available { get; set; }
 
-    [JsonPropertyName("currentAssignments")]
-    [JsonProperty("currentAssignments")]
-    public List<string> CurrentAssignments { get; set; } = [];
+    [JsonPropertyName("assignedWorkOrders")]
+    [JsonProperty("assignedWorkOrders")]
+    public List<string> AssignedWorkOrders { get; set; } = [];
 }

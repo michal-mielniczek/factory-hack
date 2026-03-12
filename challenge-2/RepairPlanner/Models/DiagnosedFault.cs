@@ -5,27 +5,27 @@ namespace RepairPlanner.Models;
 
 public sealed class DiagnosedFault
 {
-    [JsonPropertyName("machineId")]
-    [JsonProperty("machineId")]
+    [JsonPropertyName("MachineId")]
+    [JsonProperty("MachineId")]
     public string MachineId { get; set; } = string.Empty;
 
-    [JsonPropertyName("faultType")]
-    [JsonProperty("faultType")]
+    [JsonPropertyName("FaultType")]
+    [JsonProperty("FaultType")]
     public string FaultType { get; set; } = string.Empty;
 
-    [JsonPropertyName("rootCause")]
-    [JsonProperty("rootCause")]
+    [JsonPropertyName("RootCause")]
+    [JsonProperty("RootCause")]
     public string? RootCause { get; set; }
 
-    [JsonPropertyName("severity")]
-    [JsonProperty("severity")]
+    [JsonPropertyName("Severity")]
+    [JsonProperty("Severity")]
     public string? Severity { get; set; }
 
-    [JsonPropertyName("detectedAt")]
-    [JsonProperty("detectedAt")]
-    public DateTimeOffset DetectedAt { get; set; } = DateTimeOffset.UtcNow;
+    [JsonPropertyName("DetectedAt")]
+    [JsonProperty("DetectedAt")]
+    public DateTimeOffset DetectedAt { get; set; }
 
-    [JsonPropertyName("metadata")]
-    [JsonProperty("metadata")]
-    public Dictionary<string, object?> Metadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    [JsonPropertyName("Metadata")]
+    [JsonProperty("Metadata")]
+    public Dictionary<string, object?> Metadata { get; set; } = [];
 }

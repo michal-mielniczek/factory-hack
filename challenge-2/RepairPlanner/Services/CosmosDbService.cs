@@ -1,5 +1,7 @@
 using System.Net;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using RepairPlanner.Models;
 
 namespace RepairPlanner.Services;
@@ -13,49 +15,55 @@ public sealed class CosmosDbService : IDisposable
     private readonly Container _partsContainer;
     private readonly Container _workOrdersContainer;
 
-    public CosmosDbService(CosmosDbOptions options, ILogger<CosmosDbService> logger)
+    public CosmosDbService(
+        string endpoint,
+        string key,
+        string databaseName,
+        ILogger<CosmosDbService>? logger = null)
     {
-        ArgumentNullException.ThrowIfNull(options);
-        _logger = logger;
-
-        _client = new CosmosClient(options.Endpoint, options.Key, new CosmosClientOptions
+        _client = new CosmosClient(endpoint, key, new CosmosClientOptions
         {
-            ApplicationName = "Challenge2RepairPlanner",
+            ApplicationName = "RepairPlanner",
         });
         _ownsClient = true;
+        _logger = logger ?? NullLogger<CosmosDbService>.Instance;
 
-        var database = _client.GetDatabase(options.DatabaseName);
-        _techniciansContainer = database.GetContainer(options.TechniciansContainerName);
-        _partsContainer = database.GetContainer(options.PartsContainerName);
-        _workOrdersContainer = database.GetContainer(options.WorkOrdersContainerName);
+        var database = _client.GetDatabase(databaseName);
+        _techniciansContainer = database.GetContainer("Technicians");
+        _partsContainer = database.GetContainer("PartsInventory");
+        _workOrdersContainer = database.GetContainer("WorkOrders");
     }
 
     public CosmosDbService(
-        CosmosClient client,
+        CosmosClient cosmosClient,
         string databaseName,
-        ILogger<CosmosDbService> logger,
-        string techniciansContainerName = "Technicians",
-        string partsContainerName = "PartsInventory",
-        string workOrdersContainerName = "WorkOrders")
+        ILogger<CosmosDbService>? logger = null)
     {
-        _client = client;
-        _logger = logger;
+        _client = cosmosClient;
         _ownsClient = false;
+        _logger = logger ?? NullLogger<CosmosDbService>.Instance;
 
         var database = _client.GetDatabase(databaseName);
-        _techniciansContainer = database.GetContainer(techniciansContainerName);
-        _partsContainer = database.GetContainer(partsContainerName);
-        _workOrdersContainer = database.GetContainer(workOrdersContainerName);
+        _techniciansContainer = database.GetContainer("Technicians");
+        _partsContainer = database.GetContainer("PartsInventory");
+        _workOrdersContainer = database.GetContainer("WorkOrders");
+    }
+
+    public void Dispose()
+    {
+        if (_ownsClient)
+        {
+            _client.Dispose();
+        }
     }
 
     public async Task<IReadOnlyList<Technician>> GetAvailableTechniciansWithSkillsAsync(
         IReadOnlyList<string> requiredSkills,
-        string? department = "Maintenance",
+        string department = "Maintenance",
         bool requireAllSkills = false,
         CancellationToken cancellationToken = default)
     {
         requiredSkills ??= [];
-
         var normalizedSkills = requiredSkills
             .Where(skill => !string.IsNullOrWhiteSpace(skill))
             .Select(skill => skill.Trim())
@@ -81,7 +89,9 @@ public sealed class CosmosDbService : IDisposable
                 parameters.Add((parameterName, normalizedSkills[index]));
             }
 
-            queryText += $" AND ({string.Join(requireAllSkills ? " AND " : " OR ", clauses)})";
+            queryText += requireAllSkills
+                ? $" AND ({string.Join(" AND ", clauses)})"
+                : $" AND ({string.Join(" OR ", clauses)})";
         }
 
         var queryDefinition = new QueryDefinition(queryText);
@@ -90,7 +100,11 @@ public sealed class CosmosDbService : IDisposable
             queryDefinition = queryDefinition.WithParameter(name, value);
         }
 
-        return await QueryItemsAsync(_techniciansContainer, queryDefinition, department is null ? null : new PartitionKey(department), cancellationToken);
+        return await QueryItemsAsync(
+            _techniciansContainer,
+            queryDefinition,
+            string.IsNullOrWhiteSpace(department) ? null : new PartitionKey(department),
+            cancellationToken);
     }
 
     public async Task<IReadOnlyList<Part>> GetPartsByPartNumbersAsync(
@@ -99,8 +113,8 @@ public sealed class CosmosDbService : IDisposable
     {
         partNumbers ??= [];
         var normalizedPartNumbers = partNumbers
-            .Where(part => !string.IsNullOrWhiteSpace(part))
-            .Select(part => part.Trim())
+            .Where(partNumber => !string.IsNullOrWhiteSpace(partNumber))
+            .Select(partNumber => partNumber.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -113,36 +127,27 @@ public sealed class CosmosDbService : IDisposable
             "SELECT * FROM c WHERE ARRAY_CONTAINS(@partNumbers, c.partNumber)")
             .WithParameter("@partNumbers", normalizedPartNumbers);
 
-        return await QueryItemsAsync(_partsContainer, queryDefinition, partitionKey: null, cancellationToken);
+        return await QueryItemsAsync(_partsContainer, queryDefinition, null, cancellationToken);
     }
 
-    public async Task<string> CreateWorkOrderAsync(WorkOrder workOrder, CancellationToken cancellationToken = default)
+    public async Task<string> CreateWorkOrderAsync(
+        WorkOrder workOrder,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(workOrder);
 
-        workOrder.CreatedDate ??= DateTimeOffset.UtcNow;
-        workOrder.Status ??= "Created";
-        workOrder.WorkOrderNumber ??= $"WO-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}";
+        if (string.IsNullOrWhiteSpace(workOrder.Id))
+        {
+            workOrder.Id = $"wo-{DateTimeOffset.UtcNow:yyyy}-{Guid.NewGuid():N}"[..19];
+        }
 
         var response = await _workOrdersContainer.CreateItemAsync(
             workOrder,
             new PartitionKey(workOrder.Status),
             cancellationToken: cancellationToken);
 
-        _logger.LogInformation(
-            "Created work order {WorkOrderNumber} for machine {MachineId}",
-            response.Resource.WorkOrderNumber,
-            response.Resource.MachineId);
-
+        _logger.LogInformation("Created work order {WorkOrderId}", response.Resource.Id);
         return response.Resource.Id;
-    }
-
-    public void Dispose()
-    {
-        if (_ownsClient)
-        {
-            _client.Dispose();
-        }
     }
 
     private async Task<IReadOnlyList<T>> QueryItemsAsync<T>(
@@ -151,25 +156,30 @@ public sealed class CosmosDbService : IDisposable
         PartitionKey? partitionKey,
         CancellationToken cancellationToken)
     {
+        var requestOptions = new QueryRequestOptions
+        {
+            PartitionKey = partitionKey,
+        };
+
+        var results = new List<T>();
+
         try
         {
-            var results = new List<T>();
             using var iterator = container.GetItemQueryIterator<T>(
                 queryDefinition,
-                requestOptions: new QueryRequestOptions { PartitionKey = partitionKey });
+                requestOptions: requestOptions);
 
             while (iterator.HasMoreResults)
             {
                 var response = await iterator.ReadNextAsync(cancellationToken);
                 results.AddRange(response);
             }
-
-            return results;
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
-            _logger.LogWarning(ex, "Cosmos container not found while querying {ContainerId}", container.Id);
-            return [];
+            _logger.LogWarning(ex, "Container or database not found during query.");
         }
+
+        return results;
     }
 }
