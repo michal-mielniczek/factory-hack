@@ -31,19 +31,15 @@ if [ -z "$resourceGroupName" ]; then
     read resourceGroupName
 fi
 
-# Get resource group deployments, preferring the workshop template names but
-# falling back to the latest successful deployment in shared environments.
+# Get resource group deployments, find deployments starting with 'Microsoft.Template' and sort them by timestamp
 echo "Getting the deployments in '$resourceGroupName'..."
 deploymentName=$(az deployment group list --resource-group $resourceGroupName --query "[?contains(name, 'Microsoft.Template') || contains(name, 'azuredeploy')].{name:name}[0].name" --output tsv)
+if [ -z "$deploymentName" ]; then
+    deploymentName=$(az deployment group list --resource-group $resourceGroupName --query "sort_by([].{name:name,timestamp:properties.timestamp}, &timestamp)[-1].name" --output tsv 2>/dev/null || echo "")
+fi
 if [ $? -ne 0 ]; then
     echo "Error occurred while fetching deployments. Exiting..."
     exit 1
-fi
-if [ -z "$deploymentName" ]; then
-    deploymentName=$(az deployment group list \
-        --resource-group "$resourceGroupName" \
-        --query "[?properties.provisioningState=='Succeeded'] | sort_by(@, &properties.timestamp) | [-1].name" \
-        --output tsv 2>/dev/null || echo "")
 fi
 
 # Get output parameters from last deployment using Azure CLI queries instead of jq
@@ -201,12 +197,14 @@ fi
 if [ -n "$apiManagementName" ]; then
     echo "Getting API Management credentials..."
     apimGatewayUrl=$(az apim show --name $apiManagementName --resource-group $resourceGroupName --query gatewayUrl -o tsv 2>/dev/null || echo "")
+    # Get subscription keys (primary key from default subscription)
+    TOKEN=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
     SUB=$(az account show --query id --output tsv)
     apimSubscriptionKey=$(az rest \
         --method post \
         --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$resourceGroupName/providers/Microsoft.ApiManagement/service/$apiManagementName/subscriptions/master/listSecrets?api-version=2024-05-01" \
         --query primaryKey \
-        -o tsv 2>/dev/null || echo "")
+        --output tsv 2>/dev/null || echo "")
 
 else
     echo "Warning: API Management not found"

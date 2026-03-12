@@ -14,17 +14,18 @@ import sys
 from datetime import datetime
 
 # Work orders to process (matching actual Cosmos DB data)
-WORK_ORDERS = ["wo-2024-445", "wo-2024-456",
-               "wo-2024-432", "wo-2024-468", "wo-2024-419"]
+WORK_ORDERS = ["wo-2024-445", "wo-2024-456", "wo-2024-432", "wo-2024-468", "wo-2024-419"]
 
 
 async def run_agent(script_name: str, work_order: str) -> tuple[bool, str]:
     """Run an agent script with a work order ID"""
     try:
         proc = await asyncio.create_subprocess_exec(
-            sys.executable, script_name, work_order,
+            sys.executable,
+            script_name,
+            work_order,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
 
         stdout, stderr = await proc.communicate()
@@ -53,8 +54,8 @@ async def run_maintenance_scheduler_batch():
         results.append((wo, success))
 
         # Show key output lines
-        for line in output.split('\n'):
-            if any(marker in line for marker in ['✓', '✗', '===', 'Schedule ID:', 'Risk Score:']):
+        for line in output.split("\n"):
+            if any(marker in line for marker in ["✓", "✗", "===", "Schedule ID:", "Risk Score:"]):
                 print(f"   {line.strip()}")
 
         if success:
@@ -86,8 +87,8 @@ async def run_parts_ordering_batch():
         results.append((wo, success))
 
         # Show key output lines
-        for line in output.split('\n'):
-            if any(marker in line for marker in ['✓', '✗', '===', 'Order ID:', 'Total Cost:']):
+        for line in output.split("\n"):
+            if any(marker in line for marker in ["✓", "✗", "===", "Order ID:", "Total Cost:"]):
                 print(f"   {line.strip()}")
 
         if success:
@@ -132,10 +133,8 @@ async def main():
     print("=" * 64)
     print()
     print("📊 Results:")
-    print(
-        f"   - Maintenance Scheduler: {scheduler_success}/{len(WORK_ORDERS)} successful")
-    print(
-        f"   - Parts Ordering Agent: {ordering_success}/{len(WORK_ORDERS)} successful")
+    print(f"   - Maintenance Scheduler: {scheduler_success}/{len(WORK_ORDERS)} successful")
+    print(f"   - Parts Ordering Agent: {ordering_success}/{len(WORK_ORDERS)} successful")
     print(f"   - Total: {total_success}/{total_runs} successful")
     print(f"   - Duration: {duration:.1f} seconds")
     print()

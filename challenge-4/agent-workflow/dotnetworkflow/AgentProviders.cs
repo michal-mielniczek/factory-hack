@@ -59,7 +59,7 @@ public static class LocalAgentProvider
         var aoaiDeployment = config["AZURE_OPENAI_DEPLOYMENT_NAME"] ?? "gpt-4o";
         var cosmosEndpoint = config["COSMOS_ENDPOINT"];
         var cosmosKey = config["COSMOS_KEY"];
-        var cosmosDatabase = config["COSMOS_DATABASE"] ?? "FactoryOpsDB";
+        var cosmosDatabase = config["COSMOS_DATABASE_NAME"] ?? config["COSMOS_DATABASE"] ?? "FactoryOpsDB";
 
         if (string.IsNullOrEmpty(aoaiEndpoint))
         {

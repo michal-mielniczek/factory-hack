@@ -1,13 +1,11 @@
-"""Shared test fixtures for factory-hack."""
+"""Root conftest – safety fixtures to prevent hitting real Azure resources."""
 
 import pytest
 
 
 @pytest.fixture(autouse=True)
-def _set_test_env(monkeypatch):
-    """Ensure tests never accidentally hit real Azure resources."""
-    monkeypatch.setenv("COSMOS_ENDPOINT", "https://test.documents.azure.com:443/")
-    monkeypatch.setenv("COSMOS_KEY", "dGVzdC1rZXk=")
-    monkeypatch.setenv("COSMOS_DATABASE_NAME", "TestDB")
-    monkeypatch.setenv("AZURE_AI_PROJECT_ENDPOINT", "https://test.services.ai.azure.com/")
-    monkeypatch.setenv("MODEL_DEPLOYMENT_NAME", "gpt-4o-test")
+def _block_azure_env(monkeypatch):
+    """Prevent tests from accidentally using real Azure credentials."""
+    monkeypatch.setenv("COSMOS_ENDPOINT", "https://localhost:8081")
+    monkeypatch.setenv("COSMOS_KEY", "test-key-not-real")
+    monkeypatch.setenv("AZURE_AI_PROJECT_ENDPOINT", "https://localhost/fake")

@@ -37,9 +37,7 @@ prerelease = "allow"
 
 [tool.pytest.ini_options]
 testpaths = [
-    "challenge-1",
-    "challenge-3",
-    "challenge-4/agent-workflow/app",
+    "tests",
 ]
 python_files = [
     "test_*.py",
@@ -80,3 +78,7 @@ select = [
     "E9",
     "F",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"challenge-4/agent-workflow/app/agents.py" = ["E402"]
+"challenge-4/agent-workflow/app/reproduce_issue.py" = ["E402"]

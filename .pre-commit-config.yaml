@@ -6,15 +6,15 @@ repos:
         entry: uv run ruff check --force-exclude .
         language: system
         pass_filenames: false
-        types_or: [python, pyi]
+
       - id: ruff-format
         name: ruff format
         entry: uv run ruff format --check --force-exclude .
         language: system
         pass_filenames: false
-        types_or: [python, pyi]
+
       - id: pytest
-        name: pytest
+        name: pytest (manual)
         entry: uv run pytest -q
         language: system
         pass_filenames: false
