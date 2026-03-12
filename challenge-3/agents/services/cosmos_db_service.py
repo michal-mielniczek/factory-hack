@@ -212,7 +212,7 @@ class CosmosDbService:
                 machine_id=item.get("machineId", ""),
                 fault_type=item.get("faultType", ""),
                 priority=item.get("priority", ""),
-                assigned_technician=item.get("assignedTechnician", ""),
+                assigned_technician=item.get("assignedTechnician", item.get("assignedTo", "")),
                 required_parts=[
                     RequiredPart(
                         part_number=p.get("partNumber", ""),
@@ -244,6 +244,7 @@ class CosmosDbService:
             "faultType": work_order.fault_type,
             "priority": work_order.priority,
             "assignedTechnician": work_order.assigned_technician,
+            "assignedTo": work_order.assigned_technician,
             "requiredParts": [
                 {
                     "partNumber": p.part_number,

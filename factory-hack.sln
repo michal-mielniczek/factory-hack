@@ -11,6 +11,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "dotnetworkflow", "dotnetwor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FactoryWorkflow", "challenge-4\agent-workflow\dotnetworkflow\FactoryWorkflow.csproj", "{FB58B8D1-2F1E-E976-3043-CEFE43B95881}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RepairPlanner", "challenge-2\RepairPlanner\RepairPlanner.csproj", "{D4223218-16B7-4F26-9D1C-C837BE43425D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{FB58B8D1-2F1E-E976-3043-CEFE43B95881}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FB58B8D1-2F1E-E976-3043-CEFE43B95881}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FB58B8D1-2F1E-E976-3043-CEFE43B95881}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4223218-16B7-4F26-9D1C-C837BE43425D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4223218-16B7-4F26-9D1C-C837BE43425D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4223218-16B7-4F26-9D1C-C837BE43425D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4223218-16B7-4F26-9D1C-C837BE43425D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

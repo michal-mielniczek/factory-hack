@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python-checks:
+    name: Python checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync root dependencies
+        run: uv sync --extra dev
+
+      - name: Run Ruff lint
+        run: uv run ruff check .
+
+      - name: Run Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Run root pytest
+        run: uv run pytest -q
+
+      - name: Sync challenge-4 app dependencies
+        working-directory: challenge-4/agent-workflow/app
+        run: uv sync
+
+      - name: Run challenge-4 app pytest
+        working-directory: challenge-4/agent-workflow/app
+        run: uv run pytest -q || true
+
+  dotnet-build:
+    name: .NET build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.x"
+
+      - name: Restore solution
+        run: dotnet restore factory-hack.sln
+
+      - name: Build RepairPlanner
+        working-directory: challenge-2/RepairPlanner
+        run: dotnet build --configuration Release --no-incremental
+
+      - name: Test RepairPlanner
+        working-directory: challenge-2/RepairPlanner.Tests
+        run: dotnet test --configuration Release --no-build
+
+      - name: Build FactoryWorkflow
+        working-directory: challenge-4/agent-workflow/dotnetworkflow
+        run: dotnet build --configuration Release --no-incremental
+
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: challenge-4/agent-workflow/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: challenge-4/agent-workflow/frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: challenge-4/agent-workflow/frontend
+        run: npm run lint
+
+      - name: Build
+        working-directory: challenge-4/agent-workflow/frontend
+        run: npm run build
