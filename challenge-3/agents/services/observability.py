@@ -24,12 +24,9 @@ def enable_tracing(app_insights_connection: Optional[str]) -> None:
         return
 
     try:
-        trace_exporter = AzureMonitorTraceExporter.from_connection_string(
-            app_insights_connection)
-        metric_exporter = AzureMonitorMetricExporter.from_connection_string(
-            app_insights_connection)
-        log_exporter = AzureMonitorLogExporter.from_connection_string(
-            app_insights_connection)
+        trace_exporter = AzureMonitorTraceExporter.from_connection_string(app_insights_connection)
+        metric_exporter = AzureMonitorMetricExporter.from_connection_string(app_insights_connection)
+        log_exporter = AzureMonitorLogExporter.from_connection_string(app_insights_connection)
 
         configure_otel_providers(
             enable_sensitive_data=True,  # Capture prompts and completions
@@ -37,6 +34,8 @@ def enable_tracing(app_insights_connection: Optional[str]) -> None:
         )
         print("📊 Agent Framework tracing enabled (Azure Monitor)")
         print(f"   Traces sent to: {app_insights_connection.split(';')[0]}")
-        print("   View in Azure AI Foundry portal: https://ai.azure.com -> Your Project -> Tracing\n")
+        print(
+            "   View in Azure AI Foundry portal: https://ai.azure.com -> Your Project -> Tracing\n"
+        )
     except Exception as e:
         print(f"⚠️  Tracing setup failed: {e}\n")

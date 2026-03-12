@@ -34,6 +34,9 @@ fi
 # Get resource group deployments, find deployments starting with 'Microsoft.Template' and sort them by timestamp
 echo "Getting the deployments in '$resourceGroupName'..."
 deploymentName=$(az deployment group list --resource-group $resourceGroupName --query "[?contains(name, 'Microsoft.Template') || contains(name, 'azuredeploy')].{name:name}[0].name" --output tsv)
+if [ -z "$deploymentName" ]; then
+    deploymentName=$(az deployment group list --resource-group $resourceGroupName --query "sort_by([].{name:name,timestamp:properties.timestamp}, &timestamp)[-1].name" --output tsv 2>/dev/null || echo "")
+fi
 if [ $? -ne 0 ]; then
     echo "Error occurred while fetching deployments. Exiting..."
     exit 1
@@ -47,8 +50,7 @@ echo "Extracting the resource names from the deployment outputs..."
 storageAccountName=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.storageAccountName.value" -o tsv 2>/dev/null || echo "")
 logAnalyticsWorkspaceName=$(az deployment group show --resource-group $resourceGroupName --name $deploymentName --query "properties.outputs.logAnalyticsWorkspaceName.value" -o tsv 2>/dev/null || echo "")
 if [ -z "$logAnalyticsWorkspaceName" ]; then
-    echo "No Log Analytics workspace found. Please enter the workspace name manually:"
-    read logAnalyticsWorkspaceName
+    logAnalyticsWorkspaceName=$(az monitor log-analytics workspace list --resource-group $resourceGroupName --query "[0].name" -o tsv 2>/dev/null || echo "")
 fi
 if [ -n "$logAnalyticsWorkspaceName" ]; then
     logAnalyticsWorkspaceId=$(az monitor log-analytics workspace show --resource-group $resourceGroupName --workspace-name $logAnalyticsWorkspaceName --query customerId -o tsv 2>/dev/null || echo "")
@@ -198,11 +200,11 @@ if [ -n "$apiManagementName" ]; then
     # Get subscription keys (primary key from default subscription)
     TOKEN=$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)
     SUB=$(az account show --query id --output tsv)
-    apimSubscriptionKey=$(curl -X POST \
-        -H "Authorization: Bearer $TOKEN" \
-        -d "" \
-        "https://management.azure.com/subscriptions/$SUB/resourceGroups/$resourceGroupName/providers/Microsoft.ApiManagement/service/$apiManagementName/subscriptions/master/listSecrets?api-version=2024-05-01" \
-        | jq '.primaryKey' | sed 's/"//g' 2>/dev/null || echo "")
+    apimSubscriptionKey=$(az rest \
+        --method post \
+        --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$resourceGroupName/providers/Microsoft.ApiManagement/service/$apiManagementName/subscriptions/master/listSecrets?api-version=2024-05-01" \
+        --query primaryKey \
+        --output tsv 2>/dev/null || echo "")
 
 else
     echo "Warning: API Management not found"
@@ -429,10 +431,11 @@ echo "AZURE_AI_PROJECT_ENDPOINT=\"$aiFoundryProjectEndpoint\"" >> "$ENV_OUT"
 echo "AZURE_AI_PROJECT_RESOURCE_ID=\"$azureAIProjectResourceId\"" >> "$ENV_OUT"
 echo "AZURE_AI_CONNECTION_ID=\"$azureAIConnectionId\"" >> "$ENV_OUT"
 echo "AZURE_AI_MODEL_DEPLOYMENT_NAME=\"gpt-4.1\"" >> "$ENV_OUT"
-echo "EMBEDDING_MODEL_DEPLOYMENT_NAME=\"text-embedding-3-large\"" >> "$ENV_OUT"
+echo "EMBEDDING_MODEL_DEPLOYMENT_NAME=\"text-embedding-ada-002\"" >> "$ENV_OUT"
 # Azure Cosmos DB
 echo "COSMOS_NAME=\"$cosmosDbAccountName\"" >> "$ENV_OUT"
 echo "COSMOS_DATABASE_NAME=\"FactoryOpsDB\"" >> "$ENV_OUT"
+echo "COSMOS_DATABASE=\"FactoryOpsDB\"" >> "$ENV_OUT"
 echo "COSMOS_ENDPOINT=\"$cosmosDbEndpoint\"" >> "$ENV_OUT"
 echo "COSMOS_KEY=\"$cosmosDbKey\"" >> "$ENV_OUT"
 echo "COSMOS_CONNECTION_STRING=\"$cosmosDbConnectionString\"" >> "$ENV_OUT"

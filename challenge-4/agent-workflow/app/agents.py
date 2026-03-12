@@ -1,24 +1,27 @@
 from dotenv import load_dotenv
 from agent_framework import WorkflowBuilder, Executor, handler, WorkflowContext
+from agent_framework import ChatAgent
+from agent_framework.azure import AzureAIAgentClient
+from azure.identity.aio import DefaultAzureCredential
 
 import os
 import sys
 import re
 import logging
 from typing import Any
-from agent_framework import ChatAgent
 
 
 def extract_work_order_id(text: str) -> str | None:
     """Extract work order ID (wo-XXXX-XXXXXXXX) from text."""
-    match = re.search(r'wo-\d{4}-[a-f0-9]+', text, re.IGNORECASE)
+    match = re.search(r"wo-\d{4}-[a-f0-9]+", text, re.IGNORECASE)
     return match.group(0) if match else None
-from agent_framework.azure import AzureAIAgentClient
-from azure.identity.aio import DefaultAzureCredential
+
 
 # Add challenge-3 agents to the Python path for in-place imports
 # This path is relative to this file's location: challenge-4/agent-workflow/app -> challenge-3/agents
-CHALLENGE_3_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "challenge-3", "agents"))
+CHALLENGE_3_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "challenge-3", "agents")
+)
 if CHALLENGE_3_PATH not in sys.path:
     sys.path.insert(0, CHALLENGE_3_PATH)
 
@@ -39,6 +42,7 @@ logger.info(f"AI_FOUNDRY_PROJECT_ENDPOINT set: {bool(os.getenv('AI_FOUNDRY_PROJE
 # A2A Server Wrappers for Challenge-3 Agents
 # =============================================================================
 
+
 def create_maintenance_scheduler_a2a_app():
     """Create an A2A Starlette application for the Maintenance Scheduler Agent."""
     from a2a.server.apps import A2AStarletteApplication
@@ -51,8 +55,10 @@ def create_maintenance_scheduler_a2a_app():
     # Get the base URL from environment or use default
     # The URL should point to where this agent's RPC endpoint is accessible
     # Must use https:// to match what the .NET workflow uses via Aspire
-    default_url = os.getenv("MAINTENANCE_SCHEDULER_AGENT_SELF_URL", "https://localhost:8000/maintenance-scheduler/")
-    
+    default_url = os.getenv(
+        "MAINTENANCE_SCHEDULER_AGENT_SELF_URL", "https://localhost:8000/maintenance-scheduler/"
+    )
+
     agent_card = AgentCard(
         name="MaintenanceSchedulerAgent",
         description="Predictive maintenance scheduling agent that analyzes work orders, historical maintenance data, and available windows to recommend optimal maintenance schedules.",
@@ -88,7 +94,7 @@ def create_maintenance_scheduler_a2a_app():
                     for p in reversed(message.parts):
                         logger.info(f"Part: type={type(p)}, root={getattr(p, 'root', None)}")
                         # Access the inner TextPart via p.root
-                        if hasattr(p, 'root') and hasattr(p.root, 'text'):
+                        if hasattr(p, "root") and hasattr(p.root, "text"):
                             input_text = p.root.text
                             logger.info(f"Extracted text from p.root.text: '{input_text}'")
                             break
@@ -99,14 +105,18 @@ def create_maintenance_scheduler_a2a_app():
                 cosmos_endpoint = os.getenv("COSMOS_ENDPOINT")
                 cosmos_key = os.getenv("COSMOS_KEY")
                 database_name = os.getenv("COSMOS_DATABASE_NAME") or os.getenv("COSMOS_DATABASE")
-                project_endpoint = os.getenv("AI_FOUNDRY_PROJECT_ENDPOINT") or os.getenv("AZURE_AI_PROJECT_ENDPOINT")
+                project_endpoint = os.getenv("AI_FOUNDRY_PROJECT_ENDPOINT") or os.getenv(
+                    "AZURE_AI_PROJECT_ENDPOINT"
+                )
                 deployment_name = os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4o")
 
                 if not all([cosmos_endpoint, cosmos_key, database_name, project_endpoint]):
                     response_text = "Error: Missing required environment variables for MaintenanceSchedulerAgent"
                 else:
                     cosmos_service = CosmosDbService(cosmos_endpoint, cosmos_key, database_name)
-                    agent = MaintenanceSchedulerAgent(project_endpoint, deployment_name, cosmos_service)
+                    agent = MaintenanceSchedulerAgent(
+                        project_endpoint, deployment_name, cosmos_service
+                    )
 
                     # Parse work order ID from input (default matches challenge-3 maintenance_scheduler_agent.py)
                     work_order_id = extract_work_order_id(input_text) if input_text else None
@@ -116,7 +126,9 @@ def create_maintenance_scheduler_a2a_app():
 
                     # Get work order and run prediction
                     work_order = await cosmos_service.get_work_order(work_order_id)
-                    logger.info(f"Found work order: {work_order.id} for machine: {work_order.machine_id}")
+                    logger.info(
+                        f"Found work order: {work_order.id} for machine: {work_order.machine_id}"
+                    )
                     history = await cosmos_service.get_maintenance_history(work_order.machine_id)
                     windows = await cosmos_service.get_available_maintenance_windows(14)
 
@@ -141,6 +153,7 @@ def create_maintenance_scheduler_a2a_app():
 
             # Send response - messageId is required by A2A protocol
             import uuid
+
             response_message = Message(
                 messageId=str(uuid.uuid4()),
                 role="agent",
@@ -169,7 +182,9 @@ def create_parts_ordering_a2a_app():
 
     # Get the base URL from environment or use default
     # Must use https:// to match what the .NET workflow uses via Aspire
-    default_url = os.getenv("PARTS_ORDERING_AGENT_SELF_URL", "https://localhost:8000/parts-ordering/")
+    default_url = os.getenv(
+        "PARTS_ORDERING_AGENT_SELF_URL", "https://localhost:8000/parts-ordering/"
+    )
 
     agent_card = AgentCard(
         name="PartsOrderingAgent",
@@ -199,13 +214,13 @@ def create_parts_ordering_a2a_app():
             try:
                 # Extract the message text from context.message
                 message = context.message
-                
+
                 input_text = ""
                 if message and message.parts:
                     # Parts are wrapped in Part(root=TextPart(...)) structure
                     # Get the last part to capture the previous agent's message, not the user's
                     for p in reversed(message.parts):
-                        if hasattr(p, 'root') and hasattr(p.root, 'text'):
+                        if hasattr(p, "root") and hasattr(p.root, "text"):
                             input_text = p.root.text
                             break
 
@@ -213,11 +228,15 @@ def create_parts_ordering_a2a_app():
                 cosmos_endpoint = os.getenv("COSMOS_ENDPOINT")
                 cosmos_key = os.getenv("COSMOS_KEY")
                 database_name = os.getenv("COSMOS_DATABASE_NAME") or os.getenv("COSMOS_DATABASE")
-                project_endpoint = os.getenv("AI_FOUNDRY_PROJECT_ENDPOINT") or os.getenv("AZURE_AI_PROJECT_ENDPOINT")
+                project_endpoint = os.getenv("AI_FOUNDRY_PROJECT_ENDPOINT") or os.getenv(
+                    "AZURE_AI_PROJECT_ENDPOINT"
+                )
                 deployment_name = os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4o")
 
                 if not all([cosmos_endpoint, cosmos_key, database_name, project_endpoint]):
-                    response_text = "Error: Missing required environment variables for PartsOrderingAgent"
+                    response_text = (
+                        "Error: Missing required environment variables for PartsOrderingAgent"
+                    )
                 else:
                     cosmos_service = CosmosDbService(cosmos_endpoint, cosmos_key, database_name)
                     agent = PartsOrderingAgent(project_endpoint, deployment_name, cosmos_service)
@@ -232,14 +251,20 @@ def create_parts_ordering_a2a_app():
                     part_numbers = [p.part_number for p in work_order.required_parts]
                     inventory = await cosmos_service.get_inventory_items(part_numbers)
 
-                    parts_needing_order = [p for p in work_order.required_parts if not p.is_available]
+                    parts_needing_order = [
+                        p for p in work_order.required_parts if not p.is_available
+                    ]
 
                     if not parts_needing_order:
-                        response_text = "All required parts are available in stock. No parts order needed."
+                        response_text = (
+                            "All required parts are available in stock. No parts order needed."
+                        )
                         await cosmos_service.update_work_order_status(work_order.id, "Ready")
                     else:
                         needed_part_numbers = [p.part_number for p in parts_needing_order]
-                        suppliers = await cosmos_service.get_suppliers_for_parts(needed_part_numbers)
+                        suppliers = await cosmos_service.get_suppliers_for_parts(
+                            needed_part_numbers
+                        )
 
                         if not suppliers:
                             response_text = "Error: No suppliers found for required parts."
@@ -257,7 +282,9 @@ def create_parts_ordering_a2a_app():
                             )
 
                             await cosmos_service.save_parts_order(order)
-                            await cosmos_service.update_work_order_status(work_order.id, "PartsOrdered")
+                            await cosmos_service.update_work_order_status(
+                                work_order.id, "PartsOrdered"
+                            )
 
             except Exception as e:
                 logger.exception("PartsOrderingAgent error")
@@ -265,6 +292,7 @@ def create_parts_ordering_a2a_app():
 
             # Send response - messageId is required by A2A protocol
             import uuid
+
             response_message = Message(
                 messageId=str(uuid.uuid4()),
                 role="agent",
@@ -311,7 +339,9 @@ async def get_a2a_agent(server_url: str) -> ChatAgent:
 
         async with httpx.AsyncClient(timeout=60.0) as http_client:
             resolver = resolver_cls(httpx_client=http_client, base_url=server_url)
-            agent_card = await resolver.get_agent_card(relative_card_path=".well-known/agent-card.json")
+            agent_card = await resolver.get_agent_card(
+                relative_card_path=".well-known/agent-card.json"
+            )
 
         return A2AAgent(
             name=agent_card.name,
@@ -341,20 +371,20 @@ def extract_text_from_message(msg: Any) -> str:
     """Helper to extract text from various message types used in the workflow."""
     text = ""
     # Priority 1: Check for AgentExecutorResponse used by framework workflows
-    if hasattr(msg, 'agent_run_response') and hasattr(msg.agent_run_response, 'text'):
+    if hasattr(msg, "agent_run_response") and hasattr(msg.agent_run_response, "text"):
         text = msg.agent_run_response.text
     # Priority 2: Direct text attribute
-    elif getattr(msg, 'text', None):
+    elif getattr(msg, "text", None):
         text = msg.text
     # Priority 3: Nested response (e.g. wrapper)
-    elif getattr(msg, 'response', None) and getattr(msg.response, 'text', None):
+    elif getattr(msg, "response", None) and getattr(msg.response, "text", None):
         text = msg.response.text
     # Priority 4: Event parameters
-    elif getattr(msg, 'params', None):
+    elif getattr(msg, "params", None):
         params = msg.params
         if isinstance(params, dict):
-            text = params.get('text', '') or str(params)
-        elif hasattr(params, 'text'):
+            text = params.get("text", "") or str(params)
+        elif hasattr(params, "text"):
             text = params.text
         else:
             text = str(params)
@@ -362,6 +392,7 @@ def extract_text_from_message(msg: Any) -> str:
     else:
         text = str(msg)
     return text
+
 
 # --- Workflow Executors ---
 
@@ -372,7 +403,7 @@ class RequestProcessor(Executor):
         machine_id = data.get("machine_id")
         telemetry = data.get("telemetry")
         # Format the initial prompt for the Anomaly Agent
-        prompt = f'Classify the following anomalies for machine {machine_id}: {telemetry}'
+        prompt = f"Classify the following anomalies for machine {machine_id}: {telemetry}"
         await ctx.send_message(prompt)
 
 
@@ -389,6 +420,7 @@ def diagnosis_condition(msg) -> bool:
     logger.info(f"Diagnosis condition result: {should_run}")
     return should_run
 
+
 # --- Main Workflow Function ---
 
 
@@ -401,25 +433,28 @@ async def run_factory_workflow(machine_id: str, telemetry: list):
     """
 
     project_endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    #anomaly_agent_id = _require_env("ANOMALY_AGENT_ID")
-   # fault_agent_id = _require_env("FAULT_DIAGNOSIS_AGENT_ID")
+    # anomaly_agent_id = _require_env("ANOMALY_AGENT_ID")
+    # fault_agent_id = _require_env("FAULT_DIAGNOSIS_AGENT_ID")
     anomaly_agent_id = "AnomalyClassificationAgent"
-    fault_agent_id="FaultDiagnosisAgent"
+    fault_agent_id = "FaultDiagnosisAgent"
     repair_planner_url = os.getenv("REPAIR_PLANNER_AGENT_URL")
 
     credential = DefaultAzureCredential()
     try:
-        async with AzureAIAgentClient(
-            project_endpoint=project_endpoint,
-            credential=credential,
-            agent_id=anomaly_agent_id,
-            should_cleanup_agent=False,
-        ) as anomaly_client, AzureAIAgentClient(
-            project_endpoint=project_endpoint,
-            credential=credential,
-            agent_id=fault_agent_id,
-            should_cleanup_agent=False,
-        ) as fault_client:
+        async with (
+            AzureAIAgentClient(
+                project_endpoint=project_endpoint,
+                credential=credential,
+                agent_id=anomaly_agent_id,
+                should_cleanup_agent=False,
+            ) as anomaly_client,
+            AzureAIAgentClient(
+                project_endpoint=project_endpoint,
+                credential=credential,
+                agent_id=fault_agent_id,
+                should_cleanup_agent=False,
+            ) as fault_client,
+        ):
             anomaly_agent = anomaly_client.create_agent(name="AnomalyClassificationAgent")
             fault_agent = fault_client.create_agent(name="FaultDiagnosisAgent")
 

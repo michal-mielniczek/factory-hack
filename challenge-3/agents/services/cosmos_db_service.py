@@ -269,12 +269,8 @@ class CosmosDbService:
         """Get historical maintenance records for a machine."""
 
         try:
-            container = self.database.get_container_client(
-                "MaintenanceHistory")
-            query = (
-                "SELECT * FROM c WHERE c.machineId = @machineId "
-                "ORDER BY c.occurrenceDate DESC"
-            )
+            container = self.database.get_container_client("MaintenanceHistory")
+            query = "SELECT * FROM c WHERE c.machineId = @machineId ORDER BY c.occurrenceDate DESC"
             items = list(
                 container.query_items(
                     query=query,
@@ -290,10 +286,8 @@ class CosmosDbService:
                         id=item.get("id", ""),
                         machine_id=item.get("machineId", ""),
                         fault_type=item.get("faultType", ""),
-                        occurrence_date=self._parse_datetime(
-                            item.get("occurrenceDate")),
-                        resolution_date=self._parse_datetime(
-                            item.get("resolutionDate")),
+                        occurrence_date=self._parse_datetime(item.get("occurrenceDate")),
+                        resolution_date=self._parse_datetime(item.get("resolutionDate")),
                         downtime=item.get("downtime", 0),
                         cost=item.get("cost", 0.0),
                     )
@@ -304,12 +298,13 @@ class CosmosDbService:
             print(f"Warning: Could not retrieve maintenance history: {str(e)}")
             return []
 
-    async def get_available_maintenance_windows(self, days_ahead: int = 14) -> List[MaintenanceWindow]:
+    async def get_available_maintenance_windows(
+        self, days_ahead: int = 14
+    ) -> List[MaintenanceWindow]:
         """Get available maintenance windows from MES."""
 
         try:
-            container = self.database.get_container_client(
-                "MaintenanceWindows")
+            container = self.database.get_container_client("MaintenanceWindows")
             start_date = datetime.utcnow()
             end_date = start_date + timedelta(days=days_ahead)
 
@@ -353,10 +348,9 @@ class CosmosDbService:
         """Generate mock maintenance windows."""
 
         windows: List[MaintenanceWindow] = []
-        start_date = (
-            datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-            + timedelta(days=1)
-        )
+        start_date = datetime.utcnow().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) + timedelta(days=1)
 
         for i in range(days_ahead):
             current_date = start_date + timedelta(days=i)
@@ -382,7 +376,9 @@ class CosmosDbService:
             "id": schedule.id,
             "workOrderId": schedule.work_order_id,
             "machineId": schedule.machine_id,
-            "scheduledDate": schedule.scheduled_date.isoformat() if schedule.scheduled_date else None,
+            "scheduledDate": schedule.scheduled_date.isoformat()
+            if schedule.scheduled_date
+            else None,
             "maintenanceWindow": {
                 "id": schedule.maintenance_window.id,
                 "startTime": schedule.maintenance_window.start_time.isoformat()
@@ -415,8 +411,7 @@ class CosmosDbService:
 
         try:
             container = self.database.get_container_client("ChatHistories")
-            item = container.read_item(
-                item=machine_id, partition_key=machine_id)
+            item = container.read_item(item=machine_id, partition_key=machine_id)
             return item.get("historyJson")
         except exceptions.CosmosResourceNotFoundError:
             return None
@@ -451,14 +446,11 @@ class CosmosDbService:
             results: List[InventoryItem] = []
 
             for part_number in part_numbers:
-                query = (
-                    "SELECT * FROM c WHERE c.partNumber = @partNumber OR c.id = @partNumber"
-                )
+                query = "SELECT * FROM c WHERE c.partNumber = @partNumber OR c.id = @partNumber"
                 items = list(
                     container.query_items(
                         query=query,
-                        parameters=[
-                            {"name": "@partNumber", "value": part_number}],
+                        parameters=[{"name": "@partNumber", "value": part_number}],
                         enable_cross_partition_query=True,
                     )
                 )
@@ -486,8 +478,9 @@ class CosmosDbService:
 
         try:
             container = self.database.get_container_client("Suppliers")
-            items = list(container.query_items(
-                query="SELECT * FROM c", enable_cross_partition_query=True))
+            items = list(
+                container.query_items(query="SELECT * FROM c", enable_cross_partition_query=True)
+            )
 
             results: List[Supplier] = []
             for item in items:
@@ -567,8 +560,7 @@ class CosmosDbService:
 
         try:
             container = self.database.get_container_client("ChatHistories")
-            item = container.read_item(
-                item=work_order_id, partition_key=work_order_id)
+            item = container.read_item(item=work_order_id, partition_key=work_order_id)
             return item.get("historyJson")
         except exceptions.CosmosResourceNotFoundError:
             return None
