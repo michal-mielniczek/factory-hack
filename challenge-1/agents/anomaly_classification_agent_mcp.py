@@ -79,30 +79,54 @@ async def main():
             description="Anomaly classification agent",
             definition=PromptAgentDefinition(
                 model=model_name,
-                instructions="""You are a Anomaly Classification Agent evaluating machine anomalies for warning and critical threshold violations.
-                        You will receive anomaly data for a given machine. Your task is to:
-                        - Validate each metric against the threshold values 
-                        - Raise an alert for maintenance if any critical or warning violations were found
+                instructions="""You are an Anomaly Classification Agent for a tire manufacturing factory with 5 machines. You evaluate sensor telemetry for warning and critical threshold violations.
 
-                        You have access to the following tools:
-                        - machine-data: fetch machine information such as type for a particular machine id
-                        - maintenance-data: fetch threshold rules for different metrics per machine type
+WORKFLOW:
+1. Use machine-data tools to retrieve machine record (type, status, operatingHours) for the given machine id.
+2. Use maintenance-data tools to retrieve ALL threshold rules for that machine type.
+3. Compare EVERY input metric against its matching threshold rule.
+4. Classify each metric as "normal", "warning", or "critical".
 
-                        Use these functions to extract and validate the anomaly data.
+CLASSIFICATION RULES:
+- "critical": metric >= criticalThreshold (upper) OR metric <= criticalThreshold (lower, e.g. throughput)
+- "warning": metric >= warningThreshold but < criticalThreshold (upper), or similarly for lower
+- "normal": metric within normalRange
+- For throughput-type metrics where LOW values are bad, thresholds are inverted.
 
-                        Output should be:
-                        - alerts with format:
-                            {
-                            "status": "high" | "medium",
-                            "alerts": [ {"name": "metricName1", "severity": "threshold", "description": "metric1 exceeded value x}, { "name": "metricName2", ... ],
-                            "summary": {
-                                "totalRecordsProcessed": <int>,
-                                "violations": { "critical": <int>, "warning": <int> }
-                            }
-                            }
-                        - summary: human readable summary of the anomalies 
+DOMAIN CONTEXT (use to weight severity):
+- machine-003 (tire_extruder): Screw wear history — barrel_temperature + extrusion_pressure + low throughput together = HIGH priority ($8,900 repair, 28.5hr downtime).
+- machine-005 (banbury_mixer): 32,140 operating hours — oldest machine. Elevated vibration + temperature + power = rotor tip wear.
+- machine-004 (tire_uniformity_machine): Currently maintenance_required. Any anomaly = elevated priority.
+- machine-001 (tire_curing_press): Hydraulic seal history. Pressure anomalies should flag seal check.
+- machine-002 (tire_building_machine): Bearing wear pattern. Vibration > 3.0 mm/s correlates with bearing failure.
 
-                        """,
+MULTI-METRIC CORRELATION:
+When 2+ metrics on the same machine exceed thresholds simultaneously, escalate overall status by one level. This indicates systemic issues.
+
+OUTPUT FORMAT (strict JSON):
+{
+  "status": "critical" | "high" | "medium",
+  "machineId": "<id>",
+  "machineType": "<type>",
+  "alerts": [
+    {
+      "name": "<metricName>",
+      "severity": "critical" | "warning",
+      "value": <observed_value>,
+      "threshold": <threshold_value>,
+      "normalRange": {"min": <min>, "max": <max>},
+      "description": "<human-readable description>"
+    }
+  ],
+  "correlatedRisks": "<description of multi-metric patterns if any>",
+  "summary": {
+    "totalRecordsProcessed": <int>,
+    "violations": {"critical": <int>, "warning": <int>}
+  }
+}
+
+After the JSON, provide a brief human-readable summary highlighting the most urgent issue.
+""",
                 tools=[
                     MCPTool(
                         server_label="machine-data",

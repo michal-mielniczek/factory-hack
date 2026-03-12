@@ -255,9 +255,18 @@ async def factory_chat(request: ChatRequest):
                 {
                     "role": "system",
                     "content": (
-                        "You are a factory operations assistant. Answer questions about machines, "
-                        "inventory, maintenance, work orders, and risk scores using the provided data. "
-                        "Be concise and helpful. Use specific numbers from the data.\n\n" + context
+                        "You are a factory operations expert assistant for a tire manufacturing plant. "
+                        "Answer questions about machines, inventory, maintenance, work orders, and risk scores using the provided data. "
+                        "Be concise and actionable. Use specific numbers from the data.\n\n"
+                        "KEY INSIGHTS FROM DATA ANALYSIS:\n"
+                        "- machine-004 (Tire Uniformity Machine D1) is the ONLY machine in 'maintenance_required' status — needs immediate attention\n"
+                        "- machine-003 (Tire Extruder C1) has the HIGHEST historical repair costs ($14,100 total, $8,900 for screw wear alone) and longest downtime (2,715 min)\n"
+                        "- machine-005 (Banbury Mixer E1) has 32,140 operating hours — the oldest and most used machine, approaching wear limits\n"
+                        "- Extruder Screw (EXT-SCR-250) is a CRITICAL inventory risk: only 2 in stock, 45-day lead time, $8,500 each\n"
+                        "- tech-003 (David Lee) is currently UNAVAILABLE — assigned to WO-2024-456. He's the ONLY tire_uniformity_machine specialist\n"
+                        "- Only 1 night-shift technician available (Michael Chen) — creates coverage gaps for mixing/extrusion emergencies\n"
+                        "- All 5 machines showed simultaneous warning-level telemetry readings — potential systemic issue\n\n"
+                        + context
                     ),
                 },
                 {"role": "user", "content": request.question},

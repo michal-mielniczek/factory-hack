@@ -143,10 +143,38 @@ def build_dashboard_summary() -> dict:
 
 
 def compute_risk_scores() -> list[dict]:
-    """Compute predictive maintenance risk scores per machine."""
+    """Compute predictive maintenance risk scores per machine.
+
+    Uses a weighted multi-factor model (0-100 scale) combining:
+      1. Fault frequency & severity (0-25) — count weighted by avg repair cost
+      2. Operating wear (0-20) — hours relative to machine-type expected lifetime
+      3. Recent fault recency (0-15) — decays with days since last fault
+      4. Telemetry anomaly (0-20) — current sensor readings vs thresholds
+      5. Parts supply chain risk (0-10) — stock vs reorder vs lead time
+      6. Maintenance backlog (0-10) — open/in-progress work orders
+    """
     machines = get_machines()
     history = get_maintenance_history()
     inventory = get_inventory()
+    thresholds = get_thresholds()
+    telemetry = get_telemetry_samples()
+    work_orders = get_work_orders()
+
+    # Expected lifetime hours per machine type (industry heuristics)
+    lifetime_hours = {
+        "tire_curing_press": 20000,
+        "tire_building_machine": 25000,
+        "tire_extruder": 20000,
+        "tire_uniformity_machine": 30000,
+        "banbury_mixer": 35000,
+    }
+
+    # Build threshold lookup: machineType -> {metric -> threshold_record}
+    threshold_map: dict[str, dict[str, dict]] = {}
+    for t in thresholds:
+        mt = t.get("machineType", "")
+        metric = t.get("metric", "")
+        threshold_map.setdefault(mt, {})[metric] = t
 
     risk_scores = []
     for m in machines:
@@ -154,15 +182,20 @@ def compute_risk_scores() -> list[dict]:
         mtype = m["type"]
         machine_history = [h for h in history if h.get("machineId") == mid]
 
-        # Factor 1: Fault frequency (0-30 points)
+        # Factor 1: Fault frequency & cost severity (0-25 pts)
         fault_count = len(machine_history)
-        fault_score = min(fault_count * 6, 30)
+        total_cost = sum(h.get("cost", 0) for h in machine_history)
+        # Scale: 0 faults = 0, cost-weighted with diminishing returns
+        cost_weight = min(total_cost / 5000, 1.0)  # $5K normalizer
+        fault_score = min(int((fault_count * 5) + (cost_weight * 10)), 25)
 
-        # Factor 2: Operating hours wear (0-25 points)
+        # Factor 2: Operating wear (0-20 pts)
         hours = m.get("operatingHours", 0)
-        hours_score = min(int(hours / 500), 25)
+        expected = lifetime_hours.get(mtype, 25000)
+        wear_ratio = hours / expected
+        hours_score = min(int(wear_ratio * 20), 20)
 
-        # Factor 3: Recent fault recency (0-25 points)
+        # Factor 3: Recent fault recency (0-15 pts)
         recency_score = 0
         if machine_history:
             dates = []
@@ -174,28 +207,83 @@ def compute_risk_scores() -> list[dict]:
             if dates:
                 most_recent = max(dates)
                 days_since = (datetime.now(timezone.utc) - most_recent).days
-                recency_score = max(0, 25 - days_since)
+                recency_score = max(0, 15 - days_since // 7)  # loses 1pt per week
 
-        # Factor 4: Parts availability for machine type (0-20 points)
+        # Factor 4: Telemetry anomaly score (0-20 pts)
+        telemetry_score = 0
+        machine_telemetry = [t for t in telemetry if t.get("machineId") == mid]
+        machine_thresholds = threshold_map.get(mtype, {})
+        anomaly_details = []
+        if machine_telemetry and machine_thresholds:
+            # Use the most recent telemetry reading
+            latest = sorted(machine_telemetry, key=lambda t: t.get("timestamp", ""))[-1]
+            metrics = latest.get("metrics", {})
+            for metric_name, value in metrics.items():
+                thr = machine_thresholds.get(metric_name)
+                if not thr:
+                    continue
+                warning = thr.get("warningThreshold", 0)
+                critical = thr.get("criticalThreshold", 0)
+                # Handle inverted thresholds (throughput: low is bad)
+                if warning > critical:  # inverted
+                    if value <= critical:
+                        telemetry_score += 10
+                        anomaly_details.append(f"{metric_name}={value} CRITICAL (≤{critical})")
+                    elif value <= warning:
+                        telemetry_score += 5
+                        anomaly_details.append(f"{metric_name}={value} WARNING (≤{warning})")
+                else:  # normal: high is bad
+                    if value >= critical:
+                        telemetry_score += 10
+                        anomaly_details.append(f"{metric_name}={value} CRITICAL (≥{critical})")
+                    elif value >= warning:
+                        telemetry_score += 5
+                        anomaly_details.append(f"{metric_name}={value} WARNING (≥{warning})")
+            telemetry_score = min(telemetry_score, 20)
+
+        # Factor 5: Parts supply chain risk (0-10 pts)
         compatible_parts = [p for p in inventory if mtype in p.get("compatibleMachines", [])]
         parts_score = 0
+        critical_parts = []
         if compatible_parts:
-            low_stock = sum(
-                1
-                for p in compatible_parts
-                if p.get("quantityInStock", 0) <= p.get("reorderLevel", 0)
-            )
-            parts_score = min(int(low_stock / len(compatible_parts) * 20), 20)
+            for p in compatible_parts:
+                qty = p.get("quantityInStock", 0)
+                reorder = p.get("reorderLevel", 0)
+                lead = p.get("leadTimeDays", 14)
+                if qty <= reorder:
+                    parts_score += 4
+                    critical_parts.append(p.get("name", ""))
+                elif lead >= 30 and qty <= reorder * 2:
+                    parts_score += 2  # long lead time + low buffer
+            parts_score = min(parts_score, 10)
 
-        total_risk = fault_score + hours_score + recency_score + parts_score
+        # Factor 6: Maintenance backlog (0-10 pts)
+        backlog_score = 0
+        machine_open_wos = [
+            wo
+            for wo in work_orders
+            if wo.get("machineId") == mid and wo.get("status") not in ("completed", "closed")
+        ]
+        backlog_score = min(len(machine_open_wos) * 5, 10)
 
-        # Determine level
+        # Bonus: machine already in degraded status
+        status_bonus = 5 if m.get("status") == "maintenance_required" else 0
+
+        total_risk = min(
+            fault_score
+            + hours_score
+            + recency_score
+            + telemetry_score
+            + parts_score
+            + backlog_score
+            + status_bonus,
+            100,
+        )
+
         level = "low" if total_risk < 30 else "medium" if total_risk < 60 else "high"
 
         total_downtime = sum(h.get("downtime", 0) for h in machine_history)
-        avg_repair_cost = (
-            sum(h.get("cost", 0) for h in machine_history) / fault_count if fault_count > 0 else 0
-        )
+        avg_repair_cost = total_cost / fault_count if fault_count > 0 else 0
 
         risk_scores.append(
             {
@@ -205,19 +293,45 @@ def compute_risk_scores() -> list[dict]:
                 "riskScore": total_risk,
                 "riskLevel": level,
                 "factors": {
-                    "faultFrequency": {"score": fault_score, "max": 30, "faultCount": fault_count},
-                    "operatingWear": {"score": hours_score, "max": 25, "hours": hours},
-                    "recentFaults": {"score": recency_score, "max": 25},
-                    "partsAvailability": {"score": parts_score, "max": 20},
+                    "faultFrequency": {
+                        "score": fault_score,
+                        "max": 25,
+                        "faultCount": fault_count,
+                        "totalCost": total_cost,
+                    },
+                    "operatingWear": {
+                        "score": hours_score,
+                        "max": 20,
+                        "hours": hours,
+                        "expectedLifetime": expected,
+                        "wearRatio": round(wear_ratio, 2),
+                    },
+                    "recentFaults": {"score": recency_score, "max": 15},
+                    "telemetryAnomaly": {
+                        "score": telemetry_score,
+                        "max": 20,
+                        "anomalies": anomaly_details,
+                    },
+                    "partsSupplyRisk": {
+                        "score": parts_score,
+                        "max": 10,
+                        "criticalParts": critical_parts,
+                    },
+                    "maintenanceBacklog": {
+                        "score": backlog_score,
+                        "max": 10,
+                        "openWorkOrders": len(machine_open_wos),
+                    },
                 },
+                "statusBonus": status_bonus,
                 "totalDowntimeMinutes": total_downtime,
                 "avgRepairCost": round(avg_repair_cost, 2),
                 "recommendation": (
-                    "Schedule preventive maintenance immediately"
+                    "URGENT: Schedule preventive maintenance immediately — high failure probability"
                     if level == "high"
-                    else "Monitor closely and plan maintenance"
+                    else "Monitor closely — plan maintenance within next available window"
                     if level == "medium"
-                    else "Normal operation, continue routine checks"
+                    else "Normal operation — continue routine checks"
                 ),
             }
         )

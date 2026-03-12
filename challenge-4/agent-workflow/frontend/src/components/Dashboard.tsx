@@ -246,14 +246,19 @@ export function Dashboard({ apiBaseUrl }: { apiBaseUrl: string | undefined }) {
                   </span>
                 </div>
                 <div className="risk-factors">
-                  <FactorBar label="Fault Frequency" score={r.factors.faultFrequency.score} max={r.factors.faultFrequency.max} />
-                  <FactorBar label="Operating Wear" score={r.factors.operatingWear.score} max={r.factors.operatingWear.max} />
-                  <FactorBar label="Recent Faults" score={r.factors.recentFaults.score} max={r.factors.recentFaults.max} />
-                  <FactorBar label="Parts Availability" score={r.factors.partsAvailability.score} max={r.factors.partsAvailability.max} />
+                  <FactorBar label="Fault Severity" score={r.factors.faultFrequency?.score ?? 0} max={r.factors.faultFrequency?.max ?? 25} />
+                  <FactorBar label="Operating Wear" score={r.factors.operatingWear?.score ?? 0} max={r.factors.operatingWear?.max ?? 20} />
+                  <FactorBar label="Recent Faults" score={r.factors.recentFaults?.score ?? 0} max={r.factors.recentFaults?.max ?? 15} />
+                  <FactorBar label="Telemetry" score={r.factors.telemetryAnomaly?.score ?? 0} max={r.factors.telemetryAnomaly?.max ?? 20} />
+                  <FactorBar label="Parts Risk" score={r.factors.partsSupplyRisk?.score ?? 0} max={r.factors.partsSupplyRisk?.max ?? 10} />
+                  <FactorBar label="Backlog" score={r.factors.maintenanceBacklog?.score ?? 0} max={r.factors.maintenanceBacklog?.max ?? 10} />
                 </div>
                 <div className="risk-card__stats">
-                  <span>Avg repair: ${r.avgRepairCost.toLocaleString()}</span>
-                  <span>Downtime: {Math.round(r.totalDowntimeMinutes / 60)}h</span>
+                  <span>Avg repair: ${r.avgRepairCost?.toLocaleString()}</span>
+                  <span>Downtime: {Math.round((r.totalDowntimeMinutes ?? 0) / 60)}h</span>
+                  {r.factors.operatingWear?.wearRatio != null && (
+                    <span>Wear: {Math.round(r.factors.operatingWear.wearRatio * 100)}%</span>
+                  )}
                 </div>
                 <div className="risk-card__recommendation">{r.recommendation}</div>
               </div>
