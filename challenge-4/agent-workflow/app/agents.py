@@ -433,10 +433,8 @@ async def run_factory_workflow(machine_id: str, telemetry: list):
     """
 
     project_endpoint = _require_env("AZURE_AI_PROJECT_ENDPOINT")
-    # anomaly_agent_id = _require_env("ANOMALY_AGENT_ID")
-    # fault_agent_id = _require_env("FAULT_DIAGNOSIS_AGENT_ID")
-    anomaly_agent_id = "AnomalyClassificationAgent"
-    fault_agent_id = "FaultDiagnosisAgent"
+    anomaly_agent_name = "AnomalyClassificationAgent"
+    fault_agent_name = "FaultDiagnosisAgent"
     repair_planner_url = os.getenv("REPAIR_PLANNER_AGENT_URL")
 
     credential = DefaultAzureCredential()
@@ -445,18 +443,18 @@ async def run_factory_workflow(machine_id: str, telemetry: list):
             AzureAIAgentClient(
                 project_endpoint=project_endpoint,
                 credential=credential,
-                agent_id=anomaly_agent_id,
+                agent_name=anomaly_agent_name,
                 should_cleanup_agent=False,
             ) as anomaly_client,
             AzureAIAgentClient(
                 project_endpoint=project_endpoint,
                 credential=credential,
-                agent_id=fault_agent_id,
+                agent_name=fault_agent_name,
                 should_cleanup_agent=False,
             ) as fault_client,
         ):
-            anomaly_agent = anomaly_client.create_agent(name="AnomalyClassificationAgent")
-            fault_agent = fault_client.create_agent(name="FaultDiagnosisAgent")
+            anomaly_agent = anomaly_client.create_agent(name=anomaly_agent_name)
+            fault_agent = fault_client.create_agent(name=fault_agent_name)
 
             # Build the workflow
             logger.info("Building workflow with hosted Foundry agents by ID...")

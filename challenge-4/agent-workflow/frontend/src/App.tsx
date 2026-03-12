@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import aspireLogo from '/Aspire.png'
 import './App.css'
 
@@ -148,12 +148,59 @@ function App() {
   const activeIndex: number | null = null
   const [apiResponse, setApiResponse] = useState<WorkflowResponse | null>(null)
   const [apiError, setApiError] = useState<string | null>(null)
+  const [orderApproval, setOrderApproval] = useState<'pending' | 'approved' | 'rejected' | null>(null)
+
+  // Progress tracker for workflow steps
+  const WORKFLOW_STEPS = [
+    { name: 'Anomaly Classification', estimatedSec: 8 },
+    { name: 'Fault Diagnosis', estimatedSec: 10 },
+    { name: 'Repair Planning', estimatedSec: 12 },
+    { name: 'Maintenance Scheduling', estimatedSec: 8 },
+    { name: 'Parts Ordering', estimatedSec: 6 },
+  ]
+  const [activeStep, setActiveStep] = useState(0)
+  const [elapsedSec, setElapsedSec] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Faux progress: advance steps based on estimated timings
+  useEffect(() => {
+    if (runState === 'running') {
+      setActiveStep(0)
+      setElapsedSec(0)
+      const start = Date.now()
+      timerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - start) / 1000)
+        setElapsedSec(elapsed)
+        // Advance step based on cumulative estimated time
+        let cumulative = 0
+        for (let i = 0; i < WORKFLOW_STEPS.length; i++) {
+          cumulative += WORKFLOW_STEPS[i].estimatedSec
+          if (elapsed < cumulative) {
+            setActiveStep(i)
+            break
+          }
+          if (i === WORKFLOW_STEPS.length - 1) {
+            setActiveStep(i)
+          }
+        }
+      }, 1000)
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [runState])
 
   const callAnalyzeMachine = async (payload: AnalyzeMachinePayload) => {
     setSubmittedPayload(payload)
     setRunState('running')
     setApiResponse(null)
     setApiError(null)
+    setOrderApproval(null)
 
     try {
       const response = await fetch(analyzeMachineUrl, {
@@ -181,6 +228,7 @@ function App() {
 
       setApiResponse(body as WorkflowResponse)
       setRunState('completed')
+      setOrderApproval('pending')
     } catch (err) {
       setApiError(err instanceof Error ? err.message : 'Request failed')
       setRunState('idle')
@@ -198,6 +246,7 @@ function App() {
     setApiResponse(DEMO_WORKFLOW_RESPONSE)
     setRunState('completed')
     setApiError(null)
+    setOrderApproval('pending')
   }
 
   const reset = () => {
@@ -205,6 +254,7 @@ function App() {
     setSubmittedPayload(null)
     setApiResponse(null)
     setApiError(null)
+    setOrderApproval(null)
   }
 
   return (
@@ -245,6 +295,29 @@ function App() {
           <div className="card">
             <AlarmForm disabled={runState === 'running'} onSubmit={callAnalyzeMachine} />
 
+            {runState === 'running' && (
+              <div className="workflow-progress" aria-live="polite">
+                <div className="progress-header">
+                  <span className="progress-title">Agent Pipeline</span>
+                  <span className="progress-timer">{elapsedSec}s elapsed</span>
+                </div>
+                <div className="progress-steps">
+                  {WORKFLOW_STEPS.map((step, i) => (
+                    <div
+                      key={step.name}
+                      className={`progress-step ${i < activeStep ? 'progress-step--done' : i === activeStep ? 'progress-step--active' : 'progress-step--pending'}`}
+                    >
+                      <div className="progress-step__dot" />
+                      <span className="progress-step__name">{step.name}</span>
+                      <span className="progress-step__status">
+                        {i < activeStep ? '✓' : i === activeStep ? 'Running...' : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {apiError && (
               <div className="error-message" role="alert" aria-live="polite">
                 <span>{apiError}</span>
@@ -283,6 +356,50 @@ function App() {
               runState={runState} 
               workflowResponse={apiResponse}
             />
+
+            {runState === 'completed' && orderApproval && (
+              <div className={`order-approval ${orderApproval !== 'pending' ? `order-approval--${orderApproval}` : ''}`}>
+                <div className="order-approval__header">
+                  <span className="order-approval__icon">
+                    {orderApproval === 'pending' ? '⚠️' : orderApproval === 'approved' ? '✅' : '❌'}
+                  </span>
+                  <span className="order-approval__title">
+                    {orderApproval === 'pending'
+                      ? 'Parts Order Requires Approval'
+                      : orderApproval === 'approved'
+                        ? 'Order Approved'
+                        : 'Order Rejected'}
+                  </span>
+                </div>
+                {orderApproval === 'pending' ? (
+                  <>
+                    <p className="order-approval__desc">
+                      Review the agent recommendations before authorizing parts procurement.
+                    </p>
+                    <div className="order-approval__actions">
+                      <button
+                        className="primary-button order-approval__btn--approve"
+                        onClick={() => setOrderApproval('approved')}
+                      >
+                        ✓ Approve Order
+                      </button>
+                      <button
+                        className="secondary-button order-approval__btn--reject"
+                        onClick={() => setOrderApproval('rejected')}
+                      >
+                        ✕ Reject
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="order-approval__desc">
+                    {orderApproval === 'approved'
+                      ? 'Parts order has been authorized. Procurement will proceed.'
+                      : 'Parts order was declined. No procurement action will be taken.'}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="submitted-preview">
               <div className="section-header">
