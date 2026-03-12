@@ -208,7 +208,9 @@ async def factory_chat(request: ChatRequest):
 
     endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("APIM_GATEWAY_URL")
     api_key = os.getenv("AZURE_OPENAI_KEY") or os.getenv("APIM_SUBSCRIPTION_KEY")
-    deployment = os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4.1")
+    deployment = os.getenv("CHAT_MODEL_DEPLOYMENT_NAME") or os.getenv(
+        "MODEL_DEPLOYMENT_NAME", "gpt-4.1"
+    )
 
     if not endpoint:
         return fastapi.responses.JSONResponse(

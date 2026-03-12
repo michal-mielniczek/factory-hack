@@ -34,19 +34,7 @@ var apiEndpoint = dotnetworkflow.GetEndpoint("http")
 var frontend = builder.AddViteApp("frontend", "./frontend")
     .WithReference(dotnetworkflow)
     .WithReference(app)
-    .WithEnvironment("VITE_API_URL", () =>
-    {
-        var codespaceName = Environment.GetEnvironmentVariable("CODESPACE_NAME");
-        var codespacesPortForwardingDomain = Environment.GetEnvironmentVariable("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN");
-
-        if (!string.IsNullOrWhiteSpace(codespaceName) && !string.IsNullOrWhiteSpace(codespacesPortForwardingDomain))
-        {
-            return $"https://{codespaceName}-{apiEndpoint.Port}.{codespacesPortForwardingDomain}/";
-        }
-
-        var baseUrl = (apiEndpoint.ToString() ?? throw new InvalidOperationException("dotnetworkflow endpoint URL was null.")).TrimEnd('/');
-        return $"{baseUrl}/";
-    })
+    .WithEnvironment("VITE_API_URL", ReferenceExpression.Create($"{apiEndpoint}/"))
     .WaitFor(app)
     .WaitFor(dotnetworkflow);
 

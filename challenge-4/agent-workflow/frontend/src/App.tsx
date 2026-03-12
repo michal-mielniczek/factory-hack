@@ -107,10 +107,8 @@ const DEMO_WORKFLOW_RESPONSE: WorkflowResponse = {
 }
 
 function App() {
-  const apiBaseUrl = import.meta.env.VITE_API_URL as string | undefined
-  const analyzeMachineUrl = apiBaseUrl
-    ? new URL('/api/analyze_machine', apiBaseUrl).toString()
-    : '/api/analyze_machine'
+  // Always use relative URLs — Vite proxy forwards /api to the Python backend
+  const analyzeMachineUrl = '/api/analyze_machine'
 
   const [activePage, setActivePage] = useState<Page>('workflow')
 
@@ -273,9 +271,7 @@ function App() {
               <div className="muted">
                 {runState === 'running'
                   ? 'Calling API…'
-                  : apiBaseUrl
-                    ? `Using VITE_API_URL: ${apiBaseUrl}`
-                    : 'Using relative /api (Vite proxy).'}
+                  : 'Using /api via Vite proxy'}
               </div>
             </div>
           </div>
@@ -323,19 +319,19 @@ function App() {
 
         {activePage === 'dashboard' && (
           <section className="page-section" aria-label="Factory Dashboard">
-            <Dashboard apiBaseUrl={apiBaseUrl} />
+            <Dashboard apiBaseUrl={undefined} />
           </section>
         )}
 
         {activePage === 'chat' && (
           <section className="page-section" aria-label="Factory Chat Assistant">
-            <ChatPanel apiBaseUrl={apiBaseUrl} />
+            <ChatPanel apiBaseUrl={undefined} />
           </section>
         )}
 
         {activePage === 'simulation' && (
           <section className="page-section" aria-label="Factory Simulation">
-            <SimulationPanel apiBaseUrl={apiBaseUrl} />
+            <SimulationPanel apiBaseUrl={undefined} />
           </section>
         )}
       </main>
