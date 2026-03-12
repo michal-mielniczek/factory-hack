@@ -4,7 +4,12 @@ import './App.css'
 
 import { AlarmForm, type AnalyzeMachinePayload } from './components/AlarmForm'
 import { AgentIllustration, type AgentNode } from './components/AgentIllustration'
+import { Dashboard } from './components/Dashboard'
+import { ChatPanel } from './components/ChatPanel'
+import { SimulationPanel } from './components/SimulationPanel'
 import type { WorkflowResponse } from './types/workflow'
+
+type Page = 'workflow' | 'dashboard' | 'chat' | 'simulation'
 
 // Sample workflow response for demo purposes
 const DEMO_WORKFLOW_RESPONSE: WorkflowResponse = {
@@ -106,6 +111,8 @@ function App() {
   const analyzeMachineUrl = apiBaseUrl
     ? new URL('/api/analyze_machine', apiBaseUrl).toString()
     : '/api/analyze_machine'
+
+  const [activePage, setActivePage] = useState<Page>('workflow')
 
   const agents = useMemo<AgentNode[]>(
     () => [
@@ -216,11 +223,26 @@ function App() {
         </a>
         <h1 className="app-title">Factory Agent Workflow</h1>
         <p className="app-subtitle">
-          Define an alert, then watch agents process it.
+          AI-powered factory monitoring, diagnostics, and simulation
         </p>
+        <nav className="page-nav" aria-label="Main navigation">
+          <button className={`nav-btn ${activePage === 'workflow' ? 'nav-btn--active' : ''}`} onClick={() => setActivePage('workflow')}>
+            🔧 Agent Workflow
+          </button>
+          <button className={`nav-btn ${activePage === 'dashboard' ? 'nav-btn--active' : ''}`} onClick={() => setActivePage('dashboard')}>
+            📊 Dashboard
+          </button>
+          <button className={`nav-btn ${activePage === 'chat' ? 'nav-btn--active' : ''}`} onClick={() => setActivePage('chat')}>
+            💬 Factory Assistant
+          </button>
+          <button className={`nav-btn ${activePage === 'simulation' ? 'nav-btn--active' : ''}`} onClick={() => setActivePage('simulation')}>
+            🧪 Simulation
+          </button>
+        </nav>
       </header>
 
       <main className="main-content">
+        {activePage === 'workflow' && (
         <section className="workflow-layout" aria-label="Alarm submission and agent workflow">
           <div className="card">
             <AlarmForm disabled={runState === 'running'} onSubmit={callAnalyzeMachine} />
@@ -297,6 +319,25 @@ function App() {
             </div>
           </div>
         </section>
+        )}
+
+        {activePage === 'dashboard' && (
+          <section className="page-section" aria-label="Factory Dashboard">
+            <Dashboard apiBaseUrl={apiBaseUrl} />
+          </section>
+        )}
+
+        {activePage === 'chat' && (
+          <section className="page-section" aria-label="Factory Chat Assistant">
+            <ChatPanel apiBaseUrl={apiBaseUrl} />
+          </section>
+        )}
+
+        {activePage === 'simulation' && (
+          <section className="page-section" aria-label="Factory Simulation">
+            <SimulationPanel apiBaseUrl={apiBaseUrl} />
+          </section>
+        )}
       </main>
 
       <footer className="app-footer">
