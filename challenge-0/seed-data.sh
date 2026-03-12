@@ -80,7 +80,7 @@ def setup_cosmos_db():
         'MaintenanceWindows': {'partition_key': '/isAvailable'},
         'MaintenanceSchedules': {'partition_key': '/id'},
         'PartsOrders': {'partition_key': '/id'},
-        'ChatHistories': {'partition_key': '/entityId'}
+        'ChatHistories': {'partition_key': '/entityId'},
     }
     
     container_clients = {}

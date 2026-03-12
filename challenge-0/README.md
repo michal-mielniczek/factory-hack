@@ -41,9 +41,9 @@ All resources reside in a single resource group.
 - **AI Search** to query data
 - **Container Registry** and **Container Apps Environment** for running containers
 
-Sample data is seeded into different **Cosmos DB** containers that will be queried during the exercises. The seed script also creates the runtime output containers used later in the workshop so the scheduler, ordering, and memory flows do not depend on undocumented pre-existing data.
+Sample data is seeded into different **Cosmos DB** containers that will be queried during the exercises. The seed script also creates output containers used later by scheduler, ordering, and memory flows so those challenges do not depend on undocumented pre-existing data.
 <details>
-<summary>Cosmos DB Data Model</summary>
+<summary>Cosmos DB Data Model (13 Containers)</summary>
 
 | Container | Partition Key | Purpose | Sample Count |
 |-----------|--------------|---------|--------------|
@@ -303,7 +303,7 @@ az login --use-device-code
 
 ### Task 8: Seed Factory Sample Data
 
-As mentioned in [Context and background information](#-context-and-background-information), there are several data sources used throughout the hackathon. Run the script below to upload data to **Cosmos DB** and the **Storage Account**, to create the required APIs in **API Management**, and to create the output containers used later by the scheduler, ordering, and memory flows.
+As mentioned in [Context and background information](#-context-and-background-information), there are several data sources used throughout the hackathon. Run the script below to upload data to **Cosmos DB** and the **Storage Account**, seed `Suppliers`, create required APIs in **API Management**, and create output containers used later by scheduling and ordering flows.
 
 ```bash
 # Run data seeding script
