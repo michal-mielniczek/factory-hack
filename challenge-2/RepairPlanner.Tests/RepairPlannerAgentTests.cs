@@ -1,5 +1,6 @@
 using RepairPlanner;
 using RepairPlanner.Models;
+using Xunit;
 
 namespace RepairPlanner.Tests;
 

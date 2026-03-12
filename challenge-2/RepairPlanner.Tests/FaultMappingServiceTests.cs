@@ -1,4 +1,5 @@
 using RepairPlanner.Services;
+using Xunit;
 
 namespace RepairPlanner.Tests;
 

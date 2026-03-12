@@ -44,6 +44,7 @@ builder.Services.AddSingleton<ILoggerFactory>(sp => LoggerFactory.Create(b => b.
 ConfigureTracing(builder);
 
 var app = builder.Build();
+app.UseDeveloperExceptionPage();
 app.UseCors();
 
 // ============================================================================
@@ -103,7 +104,10 @@ app.MapPost("/api/analyze_machine", async (
     catch (Exception ex)
     {
         logger.LogError(ex, "Workflow failed for machine {MachineId}", request.machine_id);
-        return Results.Problem(ex.Message);
+        return Results.Problem(
+            detail: ex.ToString(),
+            title: ex.Message,
+            statusCode: 500);
     }
 });
 

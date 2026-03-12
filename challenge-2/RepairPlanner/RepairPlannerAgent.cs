@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Azure.AI.Projects;
+using Azure.AI.Projects.OpenAI;
 using Microsoft.Extensions.Logging;
 using RepairPlanner.Models;
 using RepairPlanner.Services;

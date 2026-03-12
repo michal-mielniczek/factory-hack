@@ -15,20 +15,36 @@ model_name = os.environ.get("MODEL_DEPLOYMENT_NAME")
 # Configuration
 knowledge_base_name = "machine-kb"
 search_endpoint = os.environ.get("SEARCH_SERVICE_ENDPOINT")
-machine_wiki_mcp_endpoint = (
-    f"{search_endpoint}knowledgebases/{knowledge_base_name}/mcp?api-version=2025-11-01-preview"
-)
+machine_wiki_mcp_endpoint = f"{search_endpoint.rstrip('/')}/knowledgebases/{knowledge_base_name}/mcp?api-version=2025-11-01-preview"
 machine_data_mcp_endpoint = os.environ.get("MACHINE_MCP_SERVER_ENDPOINT")
 apim_subscription_key = os.environ.get("APIM_SUBSCRIPTION_KEY")
 
 
 def create_project_connection(
-    connection_name: str, target: str, auth_type: str, credentials=None, metadata=None
+    connection_name: str,
+    target: str,
+    auth_type: str,
+    credentials=None,
+    metadata=None,
+    audience=None,
 ):
     bearer_token_provider = get_bearer_token_provider(
         DefaultAzureCredential(), "https://management.azure.com/.default"
     )
     headers = {"Authorization": f"Bearer {bearer_token_provider()}"}
+
+    properties = {
+        "authType": auth_type,
+        "category": "RemoteTool",
+        "target": target,
+        "isSharedToAll": True,
+    }
+    if credentials:
+        properties["credentials"] = credentials
+    if metadata:
+        properties["metadata"] = metadata
+    if audience:
+        properties["audience"] = audience
 
     response = requests.put(
         f"https://management.azure.com{project_resource_id}/connections/{connection_name}?api-version=2025-10-01-preview",
@@ -36,14 +52,7 @@ def create_project_connection(
         json={
             "name": connection_name,
             "type": "Microsoft.MachineLearningServices/workspaces/connections",
-            "properties": {
-                "authType": auth_type,
-                "category": "RemoteTool",
-                "target": target,
-                "isSharedToAll": True,
-                **({"credentials": credentials} if credentials else {}),
-                **({"metadata": metadata} if metadata else {}),
-            },
+            "properties": properties,
         },
     )
     response.raise_for_status()
@@ -52,19 +61,42 @@ def create_project_connection(
 
 async def main():
     try:
-        create_project_connection(
-            connection_name="machine-data-connection",
-            target=machine_data_mcp_endpoint,
-            auth_type="CustomKeys",
-            credentials={"keys": {"Ocp-Apim-Subscription-Key": apim_subscription_key}},
-            metadata={"type": "custom_MCP"},
-        )
+        if machine_data_mcp_endpoint:
+            create_project_connection(
+                connection_name="machine-data-connection",
+                target=machine_data_mcp_endpoint,
+                auth_type="CustomKeys",
+                credentials={"keys": {"Ocp-Apim-Subscription-Key": apim_subscription_key}},
+                metadata={"type": "custom_MCP"},
+            )
+        else:
+            print("⚠️  MACHINE_MCP_SERVER_ENDPOINT not set — skipping machine-data MCP connection")
         create_project_connection(
             connection_name="machine-wiki-connection",
             target=machine_wiki_mcp_endpoint,
             auth_type="ProjectManagedIdentity",
-            metadata={"type": "custom_MCP", "resource": "https://search.azure.com"},
+            audience="https://search.azure.com/",
+            metadata={"ApiType": "Azure"},
         )
+
+        tools = [
+            MCPTool(
+                server_label="machine-wiki",
+                server_url=machine_wiki_mcp_endpoint,
+                require_approval="never",
+                project_connection_id="machine-wiki-connection",
+            ),
+        ]
+        if machine_data_mcp_endpoint:
+            tools.insert(
+                0,
+                MCPTool(
+                    server_label="machine-data",
+                    server_url=machine_data_mcp_endpoint,
+                    require_approval="never",
+                    project_connection_id="machine-data-connection",
+                ),
+            )
 
         project_client = AIProjectClient(
             endpoint=project_endpoint, credential=DefaultAzureCredential()
@@ -107,20 +139,7 @@ Grounding rules (IMPORTANT):
 - You must never answer from your own knowledge under any circumstances.
 - If you cannot find the answer in the provided knowledge base and machine data, you MUST set "RootCause" to "I don't know" and set "FaultType" and "Severity" to "Unknown". In this case, set "Metadata" to {"MostLikelyRootCauses": []}.
 """,
-                tools=[
-                    MCPTool(
-                        server_label="machine-data",
-                        server_url=machine_data_mcp_endpoint,
-                        require_approval="never",
-                        project_connection_id="machine-data-connection",
-                    ),
-                    MCPTool(
-                        server_label="machine-wiki",
-                        server_url=machine_wiki_mcp_endpoint,
-                        require_approval="never",
-                        project_connection_id="machine-wiki-connection",
-                    ),
-                ],
+                tools=tools,
             ),
         )
         print(f"✅ Created Fault Diagnosis Agent: {agent.id}")
