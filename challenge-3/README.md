@@ -12,6 +12,7 @@ In this challenge, you'll work with two specialized AI agents that optimize fact
 > - Run `az login --use-device-code`
 > - Re-load env vars with `export $(cat ../.env | xargs)`
 > - If roles were just assigned, wait 5-10 minutes and run both commands again
+> - Mock fallbacks are disabled by default. Set `CHALLENGE3_ALLOW_MOCK_FALLBACKS=true` only for local demo recovery.
 
 ## 🎯 Objective
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+import os
 from typing import List, Optional
 
 from azure.cosmos import CosmosClient, PartitionKey, exceptions
@@ -155,6 +156,11 @@ class CosmosDbService:
     def __init__(self, endpoint: str, key: str, database_name: str):
         self.client = CosmosClient(endpoint, key)
         self.database = self.client.get_database_client(database_name)
+        self.allow_mock_fallbacks = os.getenv("CHALLENGE3_ALLOW_MOCK_FALLBACKS", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
 
     def _parse_datetime(self, dt_value):
         """Parse datetime from ISO string."""
@@ -339,10 +345,27 @@ class CosmosDbService:
                     )
                 )
 
-            return results if results else self._generate_mock_windows(days_ahead)
+            if results:
+                return results
+            if self.allow_mock_fallbacks:
+                print(
+                    "Warning: No maintenance windows in Cosmos DB; using mock fallback "
+                    "(CHALLENGE3_ALLOW_MOCK_FALLBACKS=true)."
+                )
+                return self._generate_mock_windows(days_ahead)
+            raise RuntimeError(
+                "No maintenance windows found in Cosmos DB container 'MaintenanceWindows'."
+            )
         except Exception as e:
-            print(f"Warning: Could not retrieve maintenance windows: {str(e)}")
-            return self._generate_mock_windows(days_ahead)
+            if self.allow_mock_fallbacks:
+                print(
+                    "Warning: Could not retrieve maintenance windows from Cosmos DB; "
+                    f"using mock fallback ({str(e)})"
+                )
+                return self._generate_mock_windows(days_ahead)
+            raise RuntimeError(
+                "Could not retrieve maintenance windows from Cosmos DB and mock fallback is disabled."
+            ) from e
 
     def _generate_mock_windows(self, days_ahead: int) -> List[MaintenanceWindow]:
         """Generate mock maintenance windows."""
@@ -497,10 +520,25 @@ class CosmosDbService:
                         )
                     )
 
-            return results if results else self._generate_mock_suppliers()
+            if results:
+                return results
+            if self.allow_mock_fallbacks:
+                print(
+                    "Warning: No suppliers in Cosmos DB; using mock fallback "
+                    "(CHALLENGE3_ALLOW_MOCK_FALLBACKS=true)."
+                )
+                return self._generate_mock_suppliers()
+            raise RuntimeError("No suppliers found in Cosmos DB container 'Suppliers'.")
         except Exception as e:
-            print(f"Warning: Could not retrieve suppliers: {str(e)}")
-            return self._generate_mock_suppliers()
+            if self.allow_mock_fallbacks:
+                print(
+                    "Warning: Could not retrieve suppliers from Cosmos DB; "
+                    f"using mock fallback ({str(e)})"
+                )
+                return self._generate_mock_suppliers()
+            raise RuntimeError(
+                "Could not retrieve suppliers from Cosmos DB and mock fallback is disabled."
+            ) from e
 
     def _generate_mock_suppliers(self) -> List[Supplier]:
         """Generate mock suppliers."""

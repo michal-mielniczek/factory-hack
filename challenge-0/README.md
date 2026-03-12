@@ -41,9 +41,9 @@ All resources reside in a single resource group.
 - **AI Search** to query data
 - **Container Registry** and **Container Apps Environment** for running containers
 
-Sample data is seeded into different **Cosmos DB** containers that will be queried during the exercises.
+Sample data is seeded into different **Cosmos DB** containers that will be queried during the exercises. The seed script also creates output containers used later by scheduler, ordering, and memory flows so those challenges do not depend on undocumented pre-existing data.
 <details>
-<summary>Cosmos DB Data Model (7 Containers)</summary>
+<summary>Cosmos DB Data Model (13 Containers)</summary>
 
 | Container | Partition Key | Purpose | Sample Count |
 |-----------|--------------|---------|--------------|
@@ -52,8 +52,14 @@ Sample data is seeded into different **Cosmos DB** containers that will be queri
 | **Telemetry** | `/machineId` | Sensor readings | 10 samples |
 | **KnowledgeBase** | `/machineType` | Troubleshooting | 10 articles |
 | **PartsInventory** | `/category` | Spare parts | 16 parts |
+| **Suppliers** | `/reliability` | Supplier catalog for parts ordering | 3 suppliers |
 | **Technicians** | `/department` | Maintenance staff | 6 technicians |
 | **WorkOrders** | `/status` | Maintenance history | 5 work orders |
+| **MaintenanceHistory** | `/machineId` | Historical maintenance events | 12 records |
+| **MaintenanceWindows** | `/isAvailable` | Candidate maintenance slots | 17 windows |
+| **MaintenanceSchedules** | `/id` | Scheduler output documents | created empty |
+| **PartsOrders** | `/id` | Parts ordering output documents | created empty |
+| **ChatHistories** | `/entityId` | Agent memory documents | created empty |
 
 </details>
 
@@ -297,7 +303,7 @@ az login --use-device-code
 
 ### Task 8: Seed Factory Sample Data
 
-As mentioned in [Context and background information](#-context-and-background-information), there are several data sources used throughout the hackathon. Run the script below to upload data to **Cosmos DB** and the **Storage Account**, and to create the required APIs in **API Management**.
+As mentioned in [Context and background information](#-context-and-background-information), there are several data sources used throughout the hackathon. Run the script below to upload data to **Cosmos DB** and the **Storage Account**, seed `Suppliers`, create required APIs in **API Management**, and create output containers used later by scheduling and ordering flows.
 
 ```bash
 # Run data seeding script

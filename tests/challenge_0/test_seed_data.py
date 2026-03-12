@@ -16,6 +16,7 @@ class TestSeedDataFiles:
         "maintenance-history.json",
         "maintenance-windows.json",
         "parts-inventory.json",
+        "suppliers.json",
         "technicians.json",
         "telemetry-samples.json",
         "thresholds.json",
@@ -40,6 +41,10 @@ class TestSeedDataFiles:
     def test_technicians_count(self):
         technicians = json.loads((DATA_DIR / "technicians.json").read_text())
         assert len(technicians) == 6
+
+    def test_suppliers_count(self):
+        suppliers = json.loads((DATA_DIR / "suppliers.json").read_text())
+        assert len(suppliers) >= 3
 
     def test_telemetry_has_anomalies(self):
         telemetry = json.loads((DATA_DIR / "telemetry-samples.json").read_text())
