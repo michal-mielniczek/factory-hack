@@ -100,7 +100,7 @@ public sealed class CosmosDbService : IDisposable
             queryDefinition = queryDefinition.WithParameter(name, value);
         }
 
-        return await QueryItemsAsync(
+        return await QueryItemsAsync<Technician>(
             _techniciansContainer,
             queryDefinition,
             string.IsNullOrWhiteSpace(department) ? null : new PartitionKey(department),
@@ -127,7 +127,7 @@ public sealed class CosmosDbService : IDisposable
             "SELECT * FROM c WHERE ARRAY_CONTAINS(@partNumbers, c.partNumber)")
             .WithParameter("@partNumbers", normalizedPartNumbers);
 
-        return await QueryItemsAsync(_partsContainer, queryDefinition, null, cancellationToken);
+        return await QueryItemsAsync<Part>(_partsContainer, queryDefinition, null, cancellationToken);
     }
 
     public async Task<string> CreateWorkOrderAsync(
